@@ -82,11 +82,14 @@ export async function weeklySummary(): Promise<string> {
         order by volume desc limit 3`,
       params,
     ),
-    pool.query<{ current: string | null; previous: string | null }>(
-      `select (select weight_kg from body_weight_logs where user_id = $1
+    // "current" only counts if weighed this week; otherwise there's no change to report.
+    pool.query<{ current: string | null; previous: string | null; latest: string | null }>(
+      `select (select weight_kg from body_weight_logs where user_id = $1 and date >= ${WEEK_START}
                 order by date desc limit 1) as current,
               (select weight_kg from body_weight_logs where user_id = $1 and date < ${WEEK_START}
-                order by date desc limit 1) as previous`,
+                order by date desc limit 1) as previous,
+              (select weight_kg from body_weight_logs where user_id = $1
+                order by date desc limit 1) as latest`,
       params,
     ),
     pool.query<{ current_streak: number; longest_streak: number }>(
@@ -128,6 +131,8 @@ export async function weeklySummary(): Promise<string> {
     const diff = wt.previous ? Number(wt.current) - Number(wt.previous) : null;
     const diffText = diff === null ? "" : ` (${diff > 0 ? "+" : ""}${diff.toFixed(1)} kg na semana)`;
     lines.push(`⚖️ Peso: ${Number(wt.current).toFixed(1)} kg${diffText}`);
+  } else if (wt.latest) {
+    lines.push(`⚖️ Peso: ${Number(wt.latest).toFixed(1)} kg (sem pesagem nesta semana)`);
   }
 
   const s = streak.rows[0];
