@@ -1,5 +1,5 @@
-# Production stack on the koala-server. BOT_TOKEN and ALLOWED_CHAT_ID come
-# from BOT_ENV_FILE (set by the deploy workflow to
+# Production stack on the koala-server. BOT_TOKEN, ALLOWED_CHAT_ID and
+# KOALA_FIT_DATABASE_URL come from BOT_ENV_FILE (set by the deploy workflow to
 # ~/apps/koala-server-telegram-bot/.env on the server) or a local .env.
 services:
   bot:
@@ -10,7 +10,16 @@ services:
     env_file: ${BOT_ENV_FILE:-.env}
     environment:
       TZ: America/Sao_Paulo
+    ports:
+      # Internal /notify endpoint for deploy workflows and the backup timer.
+      - "127.0.0.1:8081:8081"
     volumes:
       # Read/write: /restart needs to call the Docker API.
       - /var/run/docker.sock:/var/run/docker.sock
       - /home/ubuntu/backups/local:/backups:ro
+    networks: [db]
+
+networks:
+  # Shared with the postgres container (~/apps/postgres).
+  db:
+    external: true

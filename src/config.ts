@@ -13,6 +13,13 @@ export const config = {
   // filesystem, so statfs() on it also reports the root disk usage.
   backupsDir: process.env.BACKUPS_DIR ?? "/backups",
   timeZone: process.env.TZ ?? "America/Sao_Paulo",
+  // Read-only role on the koala-fit database (training reminder + weekly summary).
+  koalaFitDatabaseUrl: required("KOALA_FIT_DATABASE_URL"),
+  notifyPort: Number(process.env.NOTIFY_PORT ?? 8081),
+  dailySummaryTime: process.env.DAILY_SUMMARY_TIME ?? "08:00",
+  trainingReminderTime: process.env.TRAINING_REMINDER_TIME ?? "18:00",
+  // Sundays.
+  weeklySummaryTime: process.env.WEEKLY_SUMMARY_TIME ?? "20:00",
 };
 
 if (!Number.isSafeInteger(config.allowedChatId)) {

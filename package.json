@@ -10,10 +10,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "grammy": "^1.46.0"
+    "grammy": "^1.46.0",
+    "pg": "^8.23.0"
   },
   "devDependencies": {
     "@types/node": "^22.20.4",
+    "@types/pg": "^8.23.1",
     "typescript": "^5.9.3"
   },
   "packageManager": "pnpm@11.1.2"

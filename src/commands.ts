@@ -1,7 +1,7 @@
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { config } from "./config.ts";
-import { containerLogs, containerName, listContainers } from "./docker.ts";
+import { containerLogs, containerName, containerState, listContainers } from "./docker.ts";
 import { cpuPercent, disk, loadAverage, memory, uptimeSeconds } from "./host.ts";
 import { bytes, dateTime, duration, escapeHtml, percent } from "./format.ts";
 
@@ -63,6 +63,37 @@ export async function backupMessage(): Promise<string> {
     ...lines,
     "",
     `${files.length} arquivo(s) locais · cópia diária no Google Drive às 3h`,
+  ].join("\n");
+}
+
+/** Containers that (re)started in the last 24h — a deploy, a crash or a manual restart. */
+async function recentRestarts(): Promise<string[]> {
+  const dayAgo = Date.now() - 86_400_000;
+  const lines: string[] = [];
+  for (const c of await listContainers()) {
+    const name = containerName(c);
+    const { startedAt, restartCount } = await containerState(name);
+    if (c.State !== "running") {
+      lines.push(`🔴 <b>${escapeHtml(name)}</b> está parado`);
+    } else if (startedAt.getTime() > dayAgo) {
+      const crashes = restartCount > 0 ? ` · ${restartCount} reinício(s) automático(s)` : "";
+      lines.push(`🔄 <b>${escapeHtml(name)}</b> iniciou às ${dateTime(startedAt)}${crashes}`);
+    }
+  }
+  return lines;
+}
+
+export async function dailySummaryMessage(): Promise<string> {
+  const [status, backup, restarts] = await Promise.all([statusMessage(), backupMessage(), recentRestarts()]);
+  return [
+    "<b>☀️ Bom dia! Resumo do servidor</b>",
+    "",
+    status,
+    "",
+    backup,
+    "",
+    "<b>🔄 Últimas 24h</b>",
+    ...(restarts.length > 0 ? restarts : ["Nenhum container reiniciou."]),
   ].join("\n");
 }
 

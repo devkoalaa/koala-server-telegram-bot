@@ -34,6 +34,21 @@ jobs:
           fi
           docker compose logs --tail 5 bot
 
+      - name: Notify Telegram
+        if: always()
+        env:
+          STATUS: ${{ job.status }}
+          # Via env, not ${{ }} inside the script: the commit message is untrusted input.
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          icon="✅"; [ "$STATUS" = "success" ] || icon="❌"
+          text="$icon Deploy ${GITHUB_REPOSITORY#*/}: $STATUS
+          ${GITHUB_SHA::7} — ${COMMIT_MESSAGE%%$'\n'*}
+          $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          jq -n --arg text "$text" '{text: $text}' \
+            | curl -fsS -m 10 http://127.0.0.1:8081/notify -H 'content-type: application/json' --data-binary @- \
+            || echo "Aviso no Telegram não enviado"
+
       - name: Clean up old images
         if: always()
         run: docker image prune -f

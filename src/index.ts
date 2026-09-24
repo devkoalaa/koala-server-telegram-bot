@@ -1,8 +1,11 @@
 import { Bot, InlineKeyboard, type Context } from "grammy";
 import { config } from "./config.ts";
-import { backupMessage, logsMessage, statusMessage } from "./commands.ts";
+import { backupMessage, dailySummaryMessage, logsMessage, statusMessage } from "./commands.ts";
 import { containerName, listContainers, restartContainer } from "./docker.ts";
+import { trainingReminder, weeklySummary } from "./fitness.ts";
 import { escapeHtml } from "./format.ts";
+import { startNotifyServer } from "./notify-server.ts";
+import { parseTime, startScheduler } from "./scheduler.ts";
 
 const DEFAULT_LOG_LINES = 30;
 const MAX_LOG_LINES = 200;
@@ -12,6 +15,8 @@ const COMMANDS = [
   { command: "backup", description: "Quando foi o último backup de cada banco e o tamanho" },
   { command: "logs", description: "Últimas linhas de log de um container — ex.: /logs koala-fit 50" },
   { command: "restart", description: "Reinicia um container, com confirmação — ex.: /restart koala-fit" },
+  { command: "resumo", description: "Resumo do servidor (o mesmo que chega todo dia de manhã)" },
+  { command: "semana", description: "Resumo da semana de treinos no Koala Fit" },
 ];
 
 const bot = new Bot(config.botToken);
@@ -62,6 +67,10 @@ bot.command(["start", "help"], (ctx) =>
 bot.command("status", (ctx) => withErrors(ctx, async () => reply(ctx, await statusMessage())));
 
 bot.command("backup", (ctx) => withErrors(ctx, async () => reply(ctx, await backupMessage())));
+
+bot.command("resumo", (ctx) => withErrors(ctx, async () => reply(ctx, await dailySummaryMessage())));
+
+bot.command("semana", (ctx) => withErrors(ctx, async () => reply(ctx, await weeklySummary())));
 
 bot.command("logs", (ctx) =>
   withErrors(ctx, async () => {
@@ -117,6 +126,37 @@ bot.catch((err) => console.error("Erro não tratado:", err.error));
 // chat only, and the global menu is cleared so nobody else sees the list.
 await bot.api.deleteMyCommands();
 await bot.api.setMyCommands(COMMANDS, { scope: { type: "chat", chat_id: config.allowedChatId } });
+
+async function sendToOwner(text: string, html = true) {
+  await bot.api.sendMessage(config.allowedChatId, text, {
+    parse_mode: html ? "HTML" : undefined,
+    link_preview_options: { is_disabled: true },
+  });
+}
+
+startNotifyServer(config.notifyPort, sendToOwner);
+
+startScheduler([
+  {
+    name: "resumo diário",
+    ...parseTime(config.dailySummaryTime),
+    run: async () => sendToOwner(await dailySummaryMessage()),
+  },
+  {
+    name: "lembrete de treino",
+    ...parseTime(config.trainingReminderTime),
+    run: async () => {
+      const message = await trainingReminder();
+      if (message) await sendToOwner(message);
+    },
+  },
+  {
+    name: "resumo semanal",
+    ...parseTime(config.weeklySummaryTime),
+    weekday: 0,
+    run: async () => sendToOwner(await weeklySummary()),
+  },
+]);
 
 const stop = () => bot.stop();
 process.once("SIGINT", stop);

@@ -64,6 +64,12 @@ export async function containerLogs(name: string, tail: number): Promise<string>
   return demux(body);
 }
 
+export async function containerState(name: string): Promise<{ startedAt: Date; restartCount: number }> {
+  const body = await expectOk("GET", `/containers/${encodeURIComponent(name)}/json`);
+  const info = JSON.parse(body.toString()) as { State: { StartedAt: string }; RestartCount: number };
+  return { startedAt: new Date(info.State.StartedAt), restartCount: info.RestartCount };
+}
+
 export async function restartContainer(name: string): Promise<void> {
   await expectOk("POST", `/containers/${encodeURIComponent(name)}/restart?t=10`);
 }
