@@ -1,0 +1,39 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Self-hosted runner installed on the koala-server itself (ARM64).
+    runs-on: [self-hosted, koala-server]
+    env:
+      COMPOSE_PROJECT_NAME: koala-server-telegram-bot
+      BOT_ENV_FILE: /home/ubuntu/apps/koala-server-telegram-bot/.env
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker compose build
+
+      - name: Start bot
+        run: docker compose up -d
+
+      - name: Check it stayed up
+        run: |
+          sleep 10
+          if [ "$(docker inspect -f '{{.State.Running}}' koala-server-telegram-bot)" != "true" ]; then
+            docker compose logs --tail 50 bot
+            exit 1
+          fi
+          docker compose logs --tail 5 bot
+
+      - name: Clean up old images
+        if: always()
+        run: docker image prune -f

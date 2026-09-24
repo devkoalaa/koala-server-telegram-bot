@@ -1,0 +1,16 @@
+# Production stack on the koala-server. BOT_TOKEN and ALLOWED_CHAT_ID come
+# from BOT_ENV_FILE (set by the deploy workflow to
+# ~/apps/koala-server-telegram-bot/.env on the server) or a local .env.
+services:
+  bot:
+    build: .
+    image: koala-server-telegram-bot:latest
+    container_name: koala-server-telegram-bot
+    restart: unless-stopped
+    env_file: ${BOT_ENV_FILE:-.env}
+    environment:
+      TZ: America/Sao_Paulo
+    volumes:
+      # Read/write: /restart needs to call the Docker API.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/ubuntu/backups/local:/backups:ro
