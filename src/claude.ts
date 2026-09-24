@@ -16,6 +16,8 @@ export function askClaude(prompt: string): Promise<string> {
   running = true;
   return new Promise<string>((resolve, reject) => {
     const ssh = spawn("ssh", [
+      "-T",
+      "-o", "LogLevel=ERROR",
       "-i", config.claudeSshKey,
       "-o", "BatchMode=yes",
       "-o", "StrictHostKeyChecking=accept-new",
