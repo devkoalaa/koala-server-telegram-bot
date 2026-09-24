@@ -1,5 +1,6 @@
 import { Bot, InlineKeyboard, type Context } from "grammy";
 import { config } from "./config.ts";
+import { askClaude, claudeBusy, splitMessage } from "./claude.ts";
 import { backupMessage, dailySummaryMessage, logsMessage, statusMessage } from "./commands.ts";
 import { containerName, listContainers, restartContainer } from "./docker.ts";
 import { trainingReminder, weeklySummary } from "./fitness.ts";
@@ -17,6 +18,7 @@ const COMMANDS = [
   { command: "restart", description: "Reinicia um container, com confirmação — ex.: /restart koala-fit" },
   { command: "resumo", description: "Resumo do servidor (o mesmo que chega todo dia de manhã)" },
   { command: "semana", description: "Resumo da semana de treinos no Koala Fit" },
+  { command: "claude", description: "Pergunta ao Claude sobre o código dos projetos (só leitura)" },
 ];
 
 const bot = new Bot(config.botToken);
@@ -71,6 +73,26 @@ bot.command("backup", (ctx) => withErrors(ctx, async () => reply(ctx, await back
 bot.command("resumo", (ctx) => withErrors(ctx, async () => reply(ctx, await dailySummaryMessage())));
 
 bot.command("semana", (ctx) => withErrors(ctx, async () => reply(ctx, await weeklySummary())));
+
+bot.command("claude", async (ctx) => {
+  const prompt = ctx.match.trim();
+  if (!prompt) {
+    return reply(ctx, "Uso: <code>/claude sua pergunta</code>\nEx.: /claude como o koala-fit calcula a sequência?");
+  }
+  if (claudeBusy()) return reply(ctx, "⏳ Ainda estou com a pergunta anterior, espera ela terminar.");
+
+  await reply(ctx, "🤖 Pensando… (pode levar alguns minutos)");
+  // Not awaited: grammY processes updates one at a time, so blocking here for
+  // minutes would freeze every other command until Claude answers.
+  askClaude(prompt)
+    .then(async (answer) => {
+      for (const part of splitMessage(answer)) {
+        await ctx.reply(part, { link_preview_options: { is_disabled: true } });
+      }
+    })
+    .catch((err) => reply(ctx, `❌ Claude falhou: ${escapeHtml(err instanceof Error ? err.message : String(err))}`))
+    .catch((err) => console.error("Falha ao responder /claude:", err));
+});
 
 bot.command("logs", (ctx) =>
   withErrors(ctx, async () => {

@@ -11,6 +11,15 @@ definido em `ALLOWED_CHAT_ID`; mensagens de qualquer outra pessoa são ignoradas
 | `/restart [container]` | Reinicia um container após confirmação; sem argumento, mostra a lista |
 | `/resumo` | Resumo do servidor sob demanda |
 | `/semana` | Resumo da semana de treinos no Koala Fit sob demanda |
+| `/claude <pergunta>` | Pergunta ao Claude Code do servidor sobre o código dos projetos — **só leitura** |
+
+### Sobre o /claude
+
+O bot entra por SSH no host com uma chave que o `authorized_keys` prende a
+`~/bin/claude-telegram`: esse script só roda `claude -p` com as ferramentas
+`Read`, `Grep` e `Glob`, em `~/workspace` mais os checkouts de produção do
+koala-fit e deste bot. Nada de editar arquivos ou rodar comandos. Uma pergunta
+por vez, com limite de 10 minutos.
 
 ## Mensagens automáticas
 
