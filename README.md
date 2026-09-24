@@ -10,7 +10,8 @@ definido em `ALLOWED_CHAT_ID`; mensagens de qualquer outra pessoa são ignoradas
 | `/logs [container] [linhas]` | Últimas linhas de log (padrão 30, máx. 200); sem argumento, mostra a lista |
 | `/restart [container]` | Reinicia um container após confirmação; sem argumento, mostra a lista |
 
-O menu de comandos do Telegram é registrado pelo próprio bot ao iniciar.
+O menu de comandos do Telegram é registrado pelo próprio bot ao iniciar, só no
+chat autorizado — para os demais, o bot não exibe comandos.
 
 ## Deploy
 

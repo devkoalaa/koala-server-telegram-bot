@@ -113,8 +113,10 @@ bot.callbackQuery("cancel", async (ctx) => {
 bot.catch((err) => console.error("Erro não tratado:", err.error));
 
 // Registers the "/" menu (with descriptions) straight from the code, so it
-// never drifts from what the bot actually handles.
-await bot.api.setMyCommands(COMMANDS);
+// never drifts from what the bot actually handles. It's scoped to the owner's
+// chat only, and the global menu is cleared so nobody else sees the list.
+await bot.api.deleteMyCommands();
+await bot.api.setMyCommands(COMMANDS, { scope: { type: "chat", chat_id: config.allowedChatId } });
 
 const stop = () => bot.stop();
 process.once("SIGINT", stop);
