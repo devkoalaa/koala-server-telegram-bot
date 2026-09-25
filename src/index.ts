@@ -6,6 +6,15 @@ import { containerName, listContainers, restartContainer } from "./docker.ts";
 import { trainingReminder, weeklySummary } from "./fitness.ts";
 import { escapeHtml } from "./format.ts";
 import { startNotifyServer } from "./notify-server.ts";
+import {
+  discardPendingReport,
+  extractReport,
+  pruneReportImages,
+  reportMessage,
+  saveReportImage,
+  savePendingReport,
+  scaleBusy,
+} from "./scale.ts";
 import { parseTime, startScheduler } from "./scheduler.ts";
 
 const DEFAULT_LOG_LINES = 30;
@@ -62,6 +71,8 @@ bot.command(["start", "help"], (ctx) =>
       "<b>🐨 Koala Server</b>",
       "",
       ...COMMANDS.map((c) => `/${c.command} — ${escapeHtml(c.description)}`),
+      "",
+      "⚖️ Mande o print do relatório da balança (de preferência como arquivo) para salvar no Koala Fit.",
     ].join("\n"),
   ),
 );
@@ -92,6 +103,54 @@ bot.command("claude", async (ctx) => {
     })
     .catch((err) => reply(ctx, `❌ Claude falhou: ${escapeHtml(err instanceof Error ? err.message : String(err))}`))
     .catch((err) => console.error("Falha ao responder /claude:", err));
+});
+
+// Scale report: a photo, or an image sent as a file (keeps full resolution).
+bot.on(["message:photo", "message:document"], async (ctx) => {
+  const doc = ctx.message.document;
+  if (doc && !doc.mime_type?.startsWith("image/")) {
+    return reply(ctx, "Pra importar o relatório da balança, mande uma imagem (foto ou arquivo).");
+  }
+  if (scaleBusy()) return reply(ctx, "⏳ Ainda estou lendo o relatório anterior, espera ele terminar.");
+
+  await withErrors(ctx, async () => {
+    const file = await ctx.getFile();
+    if (!file.file_path) throw new Error("O Telegram não devolveu o arquivo");
+    const url = `https://api.telegram.org/file/bot${config.botToken}/${file.file_path}`;
+    const id = await saveReportImage(url, file.file_path, ctx.message.message_id);
+    await reply(ctx, "⚖️ Lendo o relatório da balança…");
+    // Not awaited, like /claude: reading takes a while and would block other updates.
+    extractReport(id)
+      .then((report) =>
+        reply(
+          ctx,
+          reportMessage(report, !doc),
+          new InlineKeyboard().text("✅ Salvar", `scale-save:${id}`).text("❌ Descartar", `scale-discard:${id}`),
+        ),
+      )
+      .catch((err) => reply(ctx, `❌ Não consegui ler o relatório: ${escapeHtml(err instanceof Error ? err.message : String(err))}`))
+      .catch((err) => console.error("Falha ao responder relatório da balança:", err));
+  });
+});
+
+bot.callbackQuery(/^scale-save:(.+)$/, (ctx) =>
+  withErrors(ctx, async () => {
+    const saved = await savePendingReport(ctx.match[1]);
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageReplyMarkup();
+    await reply(
+      ctx,
+      saved
+        ? '✅ Salvo no Koala Fit. <a href="https://fit.devkoala.xyz/evolucao">Ver evolução</a>'
+        : "⌛ Esse relatório expirou (o bot reiniciou). Mande a imagem de novo.",
+    );
+  }),
+);
+
+bot.callbackQuery(/^scale-discard:(.+)$/, async (ctx) => {
+  discardPendingReport(ctx.match[1]);
+  await ctx.answerCallbackQuery();
+  await ctx.editMessageText("Relatório descartado — nada foi salvo.");
 });
 
 bot.command("logs", (ctx) =>
@@ -177,6 +236,15 @@ startScheduler([
     ...parseTime(config.weeklySummaryTime),
     weekday: 0,
     run: async () => sendToOwner(await weeklySummary()),
+  },
+  {
+    name: "limpeza de relatórios da balança",
+    hour: 3,
+    minute: 30,
+    run: async () => {
+      const removed = await pruneReportImages();
+      if (removed > 0) console.log(`Relatórios da balança apagados: ${removed}`);
+    },
   },
 ]);
 

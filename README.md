@@ -21,6 +21,22 @@ O bot entra por SSH no host com uma chave que o `authorized_keys` prende a
 koala-fit e deste bot. Nada de editar arquivos ou rodar comandos. Uma pergunta
 por vez, com limite de 10 minutos.
 
+### Relatório da balança
+
+Encaminhe o print do relatório de bioimpedância da balança (app OKOK, em chinês)
+— de preferência **como arquivo**, porque o Telegram reduz fotos. O bot salva a
+imagem em `~/apps/koala-server-telegram-bot/scale-reports` (apagada após 30
+dias), o Claude extrai os valores e o bot mostra tudo com os botões ✅ Salvar /
+❌ Descartar. Só ao salvar os dados vão para o Koala Fit
+(`body_composition_logs` e o peso do dia em `body_weight_logs`).
+
+Isolamento: o bot entra por SSH com uma segunda chave, presa a
+`~/bin/claude-scale`. Esse script tem o prompt e o JSON Schema fixos, recebe só
+o nome do arquivo e roda `claude -p` com apenas a ferramenta `Read`, liberada
+só para aquela imagem. Quem grava no banco é o bot, com o usuário
+`koala_fit_scale` (INSERT/UPDATE apenas nessas duas tabelas), depois de validar
+faixas plausíveis de cada número e da sua confirmação.
+
 ## Mensagens automáticas
 
 | Quando | O quê |
@@ -30,6 +46,7 @@ por vez, com limite de 10 minutos.
 | Domingo, 20:00 | Resumo da semana de treinos |
 | A cada deploy | Resultado da esteira (koala-fit e este bot) |
 | Se o backup falhar | Aviso com o log do erro (systemd `OnFailure=`) |
+| Todo dia, 03:30 | Apaga (sem aviso) prints da balança com mais de 30 dias |
 
 Os horários podem ser trocados no `.env` (ver `.env.example`).
 

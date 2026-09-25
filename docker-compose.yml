@@ -1,5 +1,5 @@
-# Production stack on the koala-server. BOT_TOKEN, ALLOWED_CHAT_ID and
-# KOALA_FIT_DATABASE_URL come from BOT_ENV_FILE (set by the deploy workflow to
+# Production stack on the koala-server. BOT_TOKEN, ALLOWED_CHAT_ID and the
+# KOALA_FIT_*DATABASE_URL vars come from BOT_ENV_FILE (set by the deploy workflow to
 # ~/apps/koala-server-telegram-bot/.env on the server) or a local .env.
 services:
   bot:
@@ -17,8 +17,11 @@ services:
       # Read/write: /restart needs to call the Docker API.
       - /var/run/docker.sock:/var/run/docker.sock
       - /home/ubuntu/backups/local:/backups:ro
-      # Key pinned on the host to the read-only ~/bin/claude-telegram (/claude).
+      # Keys pinned on the host to ~/bin/claude-telegram (/claude, read-only)
+      # and ~/bin/claude-scale (scale reports).
       - /home/ubuntu/apps/koala-server-telegram-bot/ssh:/ssh:ro
+      # Scale report images (kept 30 days), read by ~/bin/claude-scale.
+      - /home/ubuntu/apps/koala-server-telegram-bot/scale-reports:/scale-reports
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks: [db]

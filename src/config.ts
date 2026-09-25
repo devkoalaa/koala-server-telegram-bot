@@ -19,6 +19,14 @@ export const config = {
   // /claude: SSH into the host with a key restricted to a read-only wrapper.
   claudeSshHost: process.env.CLAUDE_SSH_HOST ?? "host.docker.internal",
   claudeSshKey: process.env.CLAUDE_SSH_KEY ?? "/ssh/id_ed25519",
+  // Scale reports: images are saved here (host's
+  // ~/apps/koala-server-telegram-bot/scale-reports) and read by Claude through
+  // a second key pinned to ~/bin/claude-scale.
+  scaleReportsDir: process.env.SCALE_REPORTS_DIR ?? "/scale-reports",
+  scaleSshKey: process.env.SCALE_SSH_KEY ?? "/ssh/id_ed25519_scale",
+  scaleReportsRetentionDays: Number(process.env.SCALE_REPORTS_RETENTION_DAYS ?? 30),
+  // Role that may only write body_composition_logs and body_weight_logs.
+  koalaFitWriterDatabaseUrl: required("KOALA_FIT_WRITER_DATABASE_URL"),
   dailySummaryTime: process.env.DAILY_SUMMARY_TIME ?? "08:00",
   trainingReminderTime: process.env.TRAINING_REMINDER_TIME ?? "18:00",
   // Sundays.
