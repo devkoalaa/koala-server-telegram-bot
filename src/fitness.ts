@@ -16,7 +16,7 @@ const TODAY = `(now() at time zone 'America/Sao_Paulo')::date`;
 // Monday of the current week (the app's weeks start on Monday).
 const WEEK_START = `date_trunc('week', ${TODAY})::date`;
 
-async function user() {
+export async function koalaFitUser() {
   const { rows } = await pool.query<{ id: string; name: string | null; weekly_goal: number }>(
     "select id, name, weekly_goal from users order by created_at limit 1",
   );
@@ -26,7 +26,7 @@ async function user() {
 
 /** Message for today's reminder, or null when today isn't a training day or it's already logged. */
 export async function trainingReminder(): Promise<string | null> {
-  const u = await user();
+  const u = await koalaFitUser();
   const { rows } = await pool.query<{ dow: number; scheduled: boolean; done: boolean; streak: number | null }>(
     `with today as (select ${TODAY} as d)
      select extract(dow from d)::int as dow,
@@ -53,7 +53,7 @@ export async function trainingReminder(): Promise<string | null> {
 }
 
 export async function weeklySummary(): Promise<string> {
-  const u = await user();
+  const u = await koalaFitUser();
   const params = [u.id];
 
   const [workouts, volume, cardio, topExercises, weight, streak] = await Promise.all([

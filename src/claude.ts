@@ -1,10 +1,11 @@
 import { spawn } from "node:child_process";
 import { config } from "./config.ts";
 
-// /claude runs Claude Code on the host over SSH. The key used here is pinned
-// in the host's authorized_keys to ~/bin/claude-telegram, a read-only wrapper
-// (Read/Grep/Glob only), so the remote command below is ignored by sshd and
-// the prompt travels on stdin.
+// Claude Code runs on the host over SSH. Each key is pinned in the host's
+// authorized_keys to one wrapper script, so sshd ignores any remote command and
+// the input travels on stdin:
+// - /claude → ~/bin/claude-telegram, read-only (Read/Grep/Glob);
+// - scale reports → ~/bin/claude-scale (see scale.ts).
 
 let running = false;
 
@@ -14,30 +15,44 @@ export function claudeBusy(): boolean {
 
 export function askClaude(prompt: string): Promise<string> {
   running = true;
+  return runOnHost(config.claudeSshKey, prompt)
+    .then((output) => output.trim() || "(resposta vazia)")
+    .finally(() => {
+      running = false;
+    });
+}
+
+/**
+ * Runs the host command pinned to `key` in authorized_keys, with `stdin` as
+ * its input. Resolves with stdout; rejects with the tail of stderr/stdout.
+ */
+export function runOnHost(key: string, stdin: string): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const ssh = spawn("ssh", [
       "-T",
       "-o", "LogLevel=ERROR",
-      "-i", config.claudeSshKey,
+      "-i", key,
       "-o", "BatchMode=yes",
       "-o", "StrictHostKeyChecking=accept-new",
       "-o", "UserKnownHostsFile=/tmp/known_hosts",
       "-o", "ConnectTimeout=10",
       `ubuntu@${config.claudeSshHost}`,
     ]);
-    let output = "";
-    ssh.stdout.on("data", (chunk: Buffer) => (output += chunk));
-    ssh.stderr.on("data", (chunk: Buffer) => (output += chunk));
+    let stdout = "";
+    let stderr = "";
+    ssh.stdout.on("data", (chunk: Buffer) => (stdout += chunk));
+    ssh.stderr.on("data", (chunk: Buffer) => (stderr += chunk));
     ssh.on("error", reject);
     ssh.on("close", (code) => {
-      // The wrapper's `timeout 10m` exits with 124.
-      if (code === 124) resolve(`${output}\n\n⏱️ Tempo esgotado (10 min).`.trim());
-      else if (code === 0) resolve(output.trim() || "(resposta vazia)");
-      else reject(new Error(output.trim().split("\n").slice(-5).join("\n") || `ssh saiu com código ${code}`));
+      // The wrappers' `timeout` exits with 124.
+      if (code === 124) reject(new Error("Tempo esgotado."));
+      else if (code === 0) resolve(stdout);
+      else {
+        const output = `${stderr}\n${stdout}`.trim();
+        reject(new Error(output.split("\n").slice(-5).join("\n") || `ssh saiu com código ${code}`));
+      }
     });
-    ssh.stdin.end(prompt);
-  }).finally(() => {
-    running = false;
+    ssh.stdin.end(stdin);
   });
 }
 
