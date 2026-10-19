@@ -4,6 +4,7 @@ import { config } from "./config.ts";
 import { containerLogs, containerName, containerState, listContainers } from "./docker.ts";
 import { cpuPercent, disk, loadAverage, memory, uptimeSeconds } from "./host.ts";
 import { bytes, dateTime, duration, escapeHtml, percent } from "./format.ts";
+import { sitesStatusLines } from "./sites.ts";
 
 // Telegram rejects messages over 4096 chars; leave room for the HTML wrapper.
 const MAX_LOG_CHARS = 3800;
@@ -34,6 +35,9 @@ export async function statusMessage(): Promise<string> {
     "",
     "<b>📦 Containers</b>",
     ...lines,
+    "",
+    "<b>🌐 Sites</b>",
+    ...sitesStatusLines(),
   ].join("\n");
 }
 

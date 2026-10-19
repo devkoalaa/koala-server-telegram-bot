@@ -5,7 +5,7 @@ definido em `ALLOWED_CHAT_ID`; mensagens de qualquer outra pessoa são ignoradas
 
 | Comando | O que faz |
 |---|---|
-| `/status` | CPU, RAM, disco, uptime e estado de cada container |
+| `/status` | CPU, RAM, disco, uptime, estado de cada container e de cada site |
 | `/backup` | Último backup de cada banco (data, idade e tamanho) |
 | `/logs [container] [linhas]` | Últimas linhas de log (padrão 30, máx. 200); sem argumento, mostra a lista |
 | `/restart [container]` | Reinicia um container após confirmação; sem argumento, mostra a lista |
@@ -46,9 +46,18 @@ faixas plausíveis de cada número e da sua confirmação.
 | Domingo, 20:00 | Resumo da semana de treinos |
 | A cada deploy | Resultado da esteira (koala-fit e este bot) |
 | Se o backup falhar | Aviso com o log do erro (systemd `OnFailure=`) |
+| Site fora do ar | Após 3 verificações seguidas com falha (1 por minuto); avisa de novo quando volta |
+| Certificado perto de vencer | Uma vez por dia, se faltarem menos de 14 dias |
 | Todo dia, 03:30 | Apaga (sem aviso) prints da balança com mais de 30 dias |
 
 Os horários podem ser trocados no `.env` (ver `.env.example`).
+
+## Verificação dos sites
+
+`src/sites.ts` testa, de fora, os endereços públicos (Koala Fit, Wallet,
+portfólio, Favela League, rádio e o relay do Automotiva) como um visitante:
+DNS → Caddy → TLS → app. Para incluir um app novo, adicione uma linha em
+`SITES`. Intervalo: `SITE_CHECK_INTERVAL_SECONDS` (padrão 60).
 
 ## Avisos de outros serviços
 

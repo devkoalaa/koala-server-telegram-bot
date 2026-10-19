@@ -16,6 +16,8 @@ export const config = {
   // Read-only role on the koala-fit database (training reminder + weekly summary).
   koalaFitDatabaseUrl: required("KOALA_FIT_DATABASE_URL"),
   notifyPort: Number(process.env.NOTIFY_PORT ?? 8081),
+  // Public sites checked from outside (see src/sites.ts).
+  siteCheckIntervalSeconds: Number(process.env.SITE_CHECK_INTERVAL_SECONDS ?? 60),
   // /claude: SSH into the host with a key restricted to a read-only wrapper.
   claudeSshHost: process.env.CLAUDE_SSH_HOST ?? "host.docker.internal",
   claudeSshKey: process.env.CLAUDE_SSH_KEY ?? "/ssh/id_ed25519",

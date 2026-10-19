@@ -24,6 +24,16 @@ services:
       - /home/ubuntu/apps/koala-server-telegram-bot/scale-reports:/scale-reports
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      # PROVISÓRIO (19/10/2026): o DNS da Oracle (169.254.169.254) ainda responde o IP
+      # do estacionamento antigo para *.devkoala.com (cache de NS de até 48 h), o que
+      # faria a verificação dos sites acusar queda. Remover a partir de 22/10/2026 —
+      # confira antes: dig +short fit.devkoala.com @169.254.169.254 → 144.22.200.152
+      - "devkoala.com:144.22.200.152"
+      - "fit.devkoala.com:144.22.200.152"
+      - "wallet.devkoala.com:144.22.200.152"
+      - "favelaleague.devkoala.com:144.22.200.152"
+      - "radio.devkoala.com:144.22.200.152"
+      - "relay-automotiva.devkoala.com:172.84.94.70"
     networks: [db]
 
 networks:

@@ -16,12 +16,13 @@ import {
   scaleBusy,
 } from "./scale.ts";
 import { parseTime, startScheduler } from "./scheduler.ts";
+import { startSiteChecks } from "./sites.ts";
 
 const DEFAULT_LOG_LINES = 30;
 const MAX_LOG_LINES = 200;
 
 const COMMANDS = [
-  { command: "status", description: "Estado do servidor (CPU, RAM, disco) e dos containers" },
+  { command: "status", description: "Estado do servidor, dos containers e dos sites" },
   { command: "backup", description: "Quando foi o último backup de cada banco e o tamanho" },
   { command: "logs", description: "Últimas linhas de log de um container — ex.: /logs koala-fit 50" },
   { command: "restart", description: "Reinicia um container, com confirmação — ex.: /restart koala-fit" },
@@ -216,6 +217,7 @@ async function sendToOwner(text: string, html = true) {
 }
 
 startNotifyServer(config.notifyPort, sendToOwner);
+startSiteChecks((html) => sendToOwner(html));
 
 startScheduler([
   {
