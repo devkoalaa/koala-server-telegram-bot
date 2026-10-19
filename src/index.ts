@@ -141,7 +141,7 @@ bot.callbackQuery(/^scale-save:(.+)$/, (ctx) =>
     await reply(
       ctx,
       saved
-        ? '✅ Salvo no Koala Fit. <a href="https://fit.devkoala.xyz/evolucao">Ver evolução</a>'
+        ? '✅ Salvo no Koala Fit. <a href="https://fit.devkoala.com/evolucao">Ver evolução</a>'
         : "⌛ Esse relatório expirou (o bot reiniciou). Mande a imagem de novo.",
     );
   }),

@@ -48,7 +48,7 @@ export async function trainingReminder(): Promise<string | null> {
       ? `Sua sequência está em <b>${streak}</b> — não deixa ela cair! 🔥`
       : "Bora começar uma sequência nova hoje? 💪",
     "",
-    '<a href="https://fit.devkoala.xyz">Abrir o Koala Fit</a>',
+    '<a href="https://fit.devkoala.com">Abrir o Koala Fit</a>',
   ].join("\n");
 }
 
