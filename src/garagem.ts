@@ -38,10 +38,14 @@ async function chamar<T>(metodo: string, caminho: string, corpo?: unknown): Prom
   return json as T;
 }
 
-const brl = (v: number) =>
-  (v < 0 ? "−" : "") +
-  "R$ " +
-  Math.abs(v).toLocaleString("pt-BR", { minimumFractionDigits: v % 1 ? 2 : 0, maximumFractionDigits: 2 });
+const brl = (v: number) => {
+  const centavos = Math.round(Math.abs(v) * 100);
+  return (
+    (v < 0 ? "−" : "") +
+    "R$ " +
+    (centavos / 100).toLocaleString("pt-BR", { minimumFractionDigits: centavos % 100 ? 2 : 0, maximumFractionDigits: 2 })
+  );
+};
 
 const barra = (pct: number) => {
   const cheios = Math.round(pct * 10);
@@ -140,7 +144,9 @@ export async function lembreteSemana(): Promise<string | null> {
     `💰 <b>Faltam ${brl(s.faltam)} para fechar a semana</b> do fundo da troca.`,
     s.seguidas > 0
       ? `Você está com ${s.seguidas} semana${s.seguidas > 1 ? "s" : ""} seguida${s.seguidas > 1 ? "s" : ""}, não deixa cair! 🔥`
-      : `Já entrou ${brl(s.valor)} de ${brl(s.meta)}.`,
+      : s.valor > 0
+        ? `Já entrou ${brl(s.valor)} de ${brl(s.meta)}.`
+        : "Ainda não entrou nada nesta semana.",
     "",
     `Responda com <code>/guardar ${s.faltam.toLocaleString("pt-BR")}</code> quando separar o dinheiro.`,
   ].join("\n");
