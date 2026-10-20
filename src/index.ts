@@ -6,6 +6,7 @@ import { containerName, listContainers, restartContainer } from "./docker.ts";
 import { trainingReminder, weeklySummary } from "./fitness.ts";
 import { escapeHtml } from "./format.ts";
 import {
+  avisosOpenFinance,
   desfazerAporte,
   fundoMessage,
   garagemAtivo,
@@ -316,6 +317,17 @@ async function sendToOwner(text: string, html = true) {
 
 startNotifyServer(config.notifyPort, sendToOwner);
 startSiteChecks((html) => sendToOwner(html));
+
+if (garagemAtivo()) {
+  // Avisos do Open Finance que o Garagem preparou (Pix recebido, cofrinho do
+  // fundo, conexão com o banco). O banco só atualiza 1 vez por dia, então
+  // 10 minutos de atraso aqui não fazem diferença.
+  setInterval(() => {
+    avisosOpenFinance()
+      .then((message) => (message ? sendToOwner(message) : undefined))
+      .catch((err) => console.error("Avisos do Garagem falharam:", err));
+  }, 10 * 60_000);
+}
 
 startScheduler([
   {

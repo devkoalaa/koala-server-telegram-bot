@@ -9,6 +9,8 @@ const APP_URL = "https://garagem.devkoala.com";
 
 type Resumo = {
   fundo: number;
+  /** Cofrinho do Mercado Pago lido pelo Open Finance, quando escolhido no app. */
+  cofrinho: { nome: string; saldo: number; lidoEm: string } | null;
   unoLiquido: number;
   poder: number;
   meta: number;
@@ -20,6 +22,12 @@ type Resumo = {
 };
 
 type Aporte = { id: string; data: string; valor: number; nota: string };
+
+type Aviso =
+  | { tipo: "entrada"; dados: { valor: number; data: string; de: string; conta: string } }
+  | { tipo: "aporte"; dados: { valor: number; data: string; cofrinho: string } }
+  | { tipo: "conexao"; dados: { status: string; contas: string[] } }
+  | { tipo: "consentimento"; dados: { ate: string; contas: string[] } };
 
 export const garagemAtivo = () => Boolean(config.garagemBotChave);
 
@@ -51,6 +59,8 @@ const barra = (pct: number) => {
   const cheios = Math.round(pct * 10);
   return "▓".repeat(cheios) + "░".repeat(10 - cheios);
 };
+
+const diaMes = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 
 const hojeSP = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: config.timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -98,6 +108,9 @@ export async function registrarAporte(valor: number, nota: string): Promise<{ ap
   } else if (valor > 0 && s.faltam > 0) {
     linhas.push("", `Faltam ${brl(s.faltam)} para fechar a semana.`);
   }
+  if (r.cofrinho) {
+    linhas.push("", `<i>Quando o movimento aparecer no cofrinho ${escapeHtml(r.cofrinho.nome)}, ele é ligado a este lançamento.</i>`);
+  }
   return { aporte, html: linhas.join("\n") };
 }
 
@@ -121,7 +134,9 @@ export async function fundoMessage(): Promise<string> {
     "",
     `${barra(r.pct)} <b>${Math.round(r.pct * 100)}%</b>`,
     `Poder de compra: <b>${brl(r.poder)}</b>`,
-    `  fundo ${brl(r.fundo)} + Uno líquido ${brl(r.unoLiquido)}`,
+    r.cofrinho
+      ? `  cofrinho ${escapeHtml(r.cofrinho.nome)} ${brl(r.fundo)} + Uno líquido ${brl(r.unoLiquido)}`
+      : `  fundo ${brl(r.fundo)} + Uno líquido ${brl(r.unoLiquido)}`,
     `Meta: ${brl(r.meta)}${r.alvo ? ` — ${escapeHtml(r.alvo)}` : ""}`,
     r.previsao.mes
       ? `Previsão: <b>${r.previsao.mes}</b>${r.previsao.meses ? ` (${r.previsao.meses} meses)` : ""}`
@@ -150,4 +165,57 @@ export async function lembreteSemana(): Promise<string | null> {
     "",
     `Responda com <code>/guardar ${s.faltam.toLocaleString("pt-BR")}</code> quando separar o dinheiro.`,
   ].join("\n");
+}
+
+/**
+ * Avisos novos do Open Finance (o Garagem sincroniza com o banco e guarda os
+ * avisos; aqui buscamos e montamos uma mensagem só). null quando não há nada.
+ */
+export async function avisosOpenFinance(): Promise<string | null> {
+  const { avisos } = await chamar<{ avisos: Aviso[] }>("POST", "/api/avisos/pegar");
+  if (avisos.length === 0) return null;
+  const r = await chamar<Resumo>("GET", "/api/resumo");
+  const s = r.semana;
+  const blocos: string[] = [];
+
+  const entradas = avisos.filter((a) => a.tipo === "entrada");
+  if (entradas.length) {
+    const linhas = entradas.map(
+      ({ dados: d }) => `💸 Caiu <b>${brl(d.valor)}</b> no ${escapeHtml(d.conta)} — Pix de ${escapeHtml(d.de)} (${diaMes(d.data)})`,
+    );
+    if (s.faltam === 0) linhas.push("A semana do fundo já está batida ✅");
+    else if (r.cofrinho) linhas.push(`Separe <b>${brl(s.faltam)}</b> no cofrinho <b>${escapeHtml(r.cofrinho.nome)}</b> pra fechar a semana.`);
+    else linhas.push(`Guardou? Registre com <code>/guardar ${s.faltam.toLocaleString("pt-BR")}</code>.`);
+    blocos.push(linhas.join("\n"));
+  }
+
+  const aportes = avisos.filter((a) => a.tipo === "aporte");
+  if (aportes.length) {
+    const linhas = aportes.map(({ dados: d }) =>
+      d.valor > 0
+        ? `🐷 <b>${brl(d.valor)}</b> entrou no cofrinho ${escapeHtml(d.cofrinho)} (${diaMes(d.data)})`
+        : `↩️ <b>${brl(-d.valor)}</b> saiu do cofrinho ${escapeHtml(d.cofrinho)} (${diaMes(d.data)})`,
+    );
+    linhas.push(
+      "Registrado no Garagem automaticamente.",
+      "",
+      `${barra(r.pct)} ${Math.round(r.pct * 100)}% da meta · semana ${s.faltam === 0 ? "batida ✅" : `faltam ${brl(s.faltam)}`}`,
+    );
+    blocos.push(linhas.join("\n"));
+  }
+
+  for (const a of avisos) {
+    if (a.tipo === "conexao") {
+      blocos.push(
+        `⚠️ A conexão do Open Finance (${escapeHtml(a.dados.contas.join(", "))}) está com problema: ${escapeHtml(a.dados.status)}.\nReconecte em meu.pluggy.ai.`,
+      );
+    } else if (a.tipo === "consentimento") {
+      const dias = Math.max(0, Math.ceil((Date.parse(a.dados.ate) - Date.now()) / 864e5));
+      blocos.push(
+        `🔑 A autorização do Open Finance (${escapeHtml(a.dados.contas.join(", "))}) vence em ${dias} dia${dias === 1 ? "" : "s"} (${diaMes(a.dados.ate.slice(0, 10))}).\nRenove em meu.pluggy.ai.`,
+      );
+    }
+  }
+
+  return blocos.length ? blocos.join("\n\n") : null;
 }
