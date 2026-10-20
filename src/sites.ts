@@ -35,6 +35,7 @@ const jsonField = (field: string) => (p: Probe) => {
 const SITES: Site[] = [
   { name: "Koala Fit", url: "https://fit.devkoala.com/login" },
   { name: "Wallet", url: "https://wallet.devkoala.com/healthz" },
+  { name: "Garagem", url: "https://garagem.devkoala.com/healthz", check: jsonField("ok") },
   { name: "Portfólio", url: "https://devkoala.com/", check: (p) => (p.body.includes("Herbert") ? null : "página sem o conteúdo esperado") },
   { name: "Favela League", url: "https://favelaleague.devkoala.com/" },
   { name: "Rádio — transmissão", url: "https://radio.devkoala.com/api/nowplaying/koala", check: jsonField("is_online") },
