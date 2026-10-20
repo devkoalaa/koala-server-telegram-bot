@@ -26,6 +26,7 @@ type Aporte = { id: string; data: string; valor: number; nota: string };
 type Aviso =
   | { tipo: "entrada"; dados: { valor: number; data: string; de: string; conta: string } }
   | { tipo: "aporte"; dados: { valor: number; data: string; cofrinho: string } }
+  | { tipo: "compra"; dados: { valor: number; data: string; loja: string; parcela: string | null; cartao: string } }
   | { tipo: "conexao"; dados: { status: string; contas: string[] } }
   | { tipo: "consentimento"; dados: { ate: string; contas: string[] } };
 
@@ -204,6 +205,16 @@ export async function avisosOpenFinance(): Promise<string | null> {
     blocos.push(linhas.join("\n"));
   }
 
+  const compras = avisos.filter((a) => a.tipo === "compra");
+  if (compras.length) {
+    const linhas = compras.map(
+      ({ dados: d }) =>
+        `💳 <b>${brl(d.valor)}</b> no cartão — ${escapeHtml(d.loja)}${d.parcela ? ` (parcela ${d.parcela})` : ""} · ${diaMes(d.data)}`,
+    );
+    linhas.push("Isso estava no dinheiro livre da semana? Veja em “Esta semana” no Garagem.");
+    blocos.push(linhas.join("\n"));
+  }
+
   for (const a of avisos) {
     if (a.tipo === "conexao") {
       blocos.push(
@@ -218,4 +229,32 @@ export async function avisosOpenFinance(): Promise<string | null> {
   }
 
   return blocos.length ? blocos.join("\n\n") : null;
+}
+
+type Agora = {
+  agenda: { tipo: string; titulo: string; detalhe?: string; valor?: number; dias?: number }[];
+  plano: { esperado: number; linhas: { rotulo: string; valor: number; falta: number }[]; sobra: number };
+};
+
+/** /agora: o que fazer e para onde vai o próximo pagamento. */
+export async function agoraMessage(): Promise<string> {
+  const { agenda, plano } = await chamar<Agora>("GET", "/api/agora");
+  const prazo = (d?: number) =>
+    d === undefined ? "" : d < 0 ? ` · venceu há ${-d} dia(s)` : d === 0 ? " · vence hoje" : ` · vence em ${d} dia${d === 1 ? "" : "s"}`;
+  const [agora, ...resto] = agenda;
+  const linhas = agora
+    ? [
+        "<b>👉 Agora</b>",
+        `<b>${escapeHtml(agora.titulo)}</b>${agora.valor ? ` — ${brl(agora.valor)}` : ""}${prazo(agora.dias)}`,
+        ...(agora.detalhe ? [escapeHtml(agora.detalhe)] : []),
+      ]
+    : ["<b>👉 Agora</b>", "Tudo em dia 🎉"];
+  if (resto.length) {
+    linhas.push("", "<b>Depois</b>", ...resto.map((i) => `• ${escapeHtml(i.titulo)}${i.valor ? ` — ${brl(i.valor)}` : ""}${prazo(i.dias)}`));
+  }
+  linhas.push("", `<b>💰 Próximo pagamento</b> (média ${brl(plano.esperado)})`);
+  for (const l of plano.linhas) linhas.push(`• ${escapeHtml(l.rotulo)}: ${brl(l.valor)}${l.falta > 0.5 ? ` (faltam ${brl(l.falta)})` : ""}`);
+  if (plano.sobra > 0) linhas.push(`• Sobra → fundo da troca: ${brl(plano.sobra)}`);
+  linhas.push("", `<a href="${APP_URL}">Abrir o Garagem</a>`);
+  return linhas.join("\n");
 }

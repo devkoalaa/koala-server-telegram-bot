@@ -6,6 +6,7 @@ import { containerName, listContainers, restartContainer } from "./docker.ts";
 import { trainingReminder, weeklySummary } from "./fitness.ts";
 import { escapeHtml } from "./format.ts";
 import {
+  agoraMessage,
   avisosOpenFinance,
   desfazerAporte,
   fundoMessage,
@@ -38,6 +39,7 @@ const COMMANDS = [
   { command: "restart", description: "Reinicia um container, com confirmação — ex.: /restart koala-fit" },
   { command: "resumo", description: "Resumo do servidor (o mesmo que chega todo dia de manhã)" },
   { command: "semana", description: "Resumo da semana de treinos no Koala Fit" },
+  { command: "agora", description: "O que fazer agora e para onde vai o próximo pagamento (Garagem)" },
   { command: "guardar", description: "Guarda dinheiro no fundo da troca — ex.: /guardar 1000 semana automotiva" },
   { command: "retirar", description: "Tira dinheiro do fundo — ex.: /retirar 800 serasa" },
   { command: "fundo", description: "Como está o fundo da troca de carro (Garagem)" },
@@ -87,7 +89,7 @@ bot.command(["start", "help"], (ctx) =>
       "",
       ...COMMANDS.map((c) => `/${c.command} — ${escapeHtml(c.description)}`),
       "",
-      "💰 Fundo da troca: /guardar, /retirar, /fundo e /parcela.",
+      "💰 Garagem: /agora, /guardar, /retirar, /fundo e /parcela.",
       "⚖️ Mande o print do relatório da balança (de preferência como arquivo) para salvar no Koala Fit.",
     ].join("\n"),
   ),
@@ -134,6 +136,10 @@ bot.command("retirar", (ctx) =>
     if (valor === null) return reply(ctx, "Uso: <code>/retirar 800 serasa</code>");
     await guardar(ctx, -valor, nota);
   }),
+);
+
+bot.command("agora", (ctx) =>
+  withErrors(ctx, async () => reply(ctx, garagemAtivo() ? await agoraMessage() : SEM_GARAGEM)),
 );
 
 bot.command("fundo", (ctx) =>
