@@ -5,6 +5,15 @@ import { backupMessage, dailySummaryMessage, logsMessage, statusMessage } from "
 import { containerName, listContainers, restartContainer } from "./docker.ts";
 import { trainingReminder, weeklySummary } from "./fitness.ts";
 import { escapeHtml } from "./format.ts";
+import {
+  desfazerAporte,
+  fundoMessage,
+  garagemAtivo,
+  lembreteSemana,
+  pagarParcela,
+  registrarAporte,
+  valorENota,
+} from "./garagem.ts";
 import { startNotifyServer } from "./notify-server.ts";
 import {
   discardPendingReport,
@@ -28,6 +37,10 @@ const COMMANDS = [
   { command: "restart", description: "Reinicia um container, com confirmação — ex.: /restart koala-fit" },
   { command: "resumo", description: "Resumo do servidor (o mesmo que chega todo dia de manhã)" },
   { command: "semana", description: "Resumo da semana de treinos no Koala Fit" },
+  { command: "guardar", description: "Guarda dinheiro no fundo da troca — ex.: /guardar 1000 semana automotiva" },
+  { command: "retirar", description: "Tira dinheiro do fundo — ex.: /retirar 800 serasa" },
+  { command: "fundo", description: "Como está o fundo da troca de carro (Garagem)" },
+  { command: "parcela", description: "Marca uma parcela do Uno como paga" },
   { command: "claude", description: "Pergunta ao Claude sobre o código dos projetos (só leitura)" },
 ];
 
@@ -73,6 +86,7 @@ bot.command(["start", "help"], (ctx) =>
       "",
       ...COMMANDS.map((c) => `/${c.command} — ${escapeHtml(c.description)}`),
       "",
+      "💰 Fundo da troca: /guardar, /retirar, /fundo e /parcela.",
       "⚖️ Mande o print do relatório da balança (de preferência como arquivo) para salvar no Koala Fit.",
     ].join("\n"),
   ),
@@ -85,6 +99,90 @@ bot.command("backup", (ctx) => withErrors(ctx, async () => reply(ctx, await back
 bot.command("resumo", (ctx) => withErrors(ctx, async () => reply(ctx, await dailySummaryMessage())));
 
 bot.command("semana", (ctx) => withErrors(ctx, async () => reply(ctx, await weeklySummary())));
+
+// ---------- Garagem (fundo da troca de carro) ----------
+
+const SEM_GARAGEM = "⚠️ Garagem não configurado: falta GARAGEM_BOT_CHAVE no .env do bot.";
+
+const atalhosGuardar = () =>
+  new InlineKeyboard()
+    .text("R$ 500", "garagem-guardar:500")
+    .text("R$ 1.000", "garagem-guardar:1000")
+    .text("R$ 1.500", "garagem-guardar:1500");
+
+async function guardar(ctx: Context, valor: number, nota: string) {
+  const { aporte, html } = await registrarAporte(valor, nota);
+  await reply(ctx, html, new InlineKeyboard().text("↩️ Desfazer", `garagem-desfazer:${aporte.id}`));
+}
+
+bot.command("guardar", (ctx) =>
+  withErrors(ctx, async () => {
+    if (!garagemAtivo()) return reply(ctx, SEM_GARAGEM);
+    const { valor, nota } = valorENota(ctx.match);
+    if (valor === null) {
+      return reply(ctx, "Quanto guardar? Toque num valor ou mande <code>/guardar 1000 semana automotiva</code>.", atalhosGuardar());
+    }
+    await guardar(ctx, valor, nota);
+  }),
+);
+
+bot.command("retirar", (ctx) =>
+  withErrors(ctx, async () => {
+    if (!garagemAtivo()) return reply(ctx, SEM_GARAGEM);
+    const { valor, nota } = valorENota(ctx.match);
+    if (valor === null) return reply(ctx, "Uso: <code>/retirar 800 serasa</code>");
+    await guardar(ctx, -valor, nota);
+  }),
+);
+
+bot.command("fundo", (ctx) =>
+  withErrors(ctx, async () => reply(ctx, garagemAtivo() ? await fundoMessage() : SEM_GARAGEM)),
+);
+
+bot.command("parcela", (ctx) =>
+  withErrors(ctx, async () => {
+    if (!garagemAtivo()) return reply(ctx, SEM_GARAGEM);
+    await reply(
+      ctx,
+      "Marcar <b>uma parcela do Uno</b> como paga?",
+      new InlineKeyboard().text("✅ Paguei", "garagem-parcela:1").text("Cancelar", "cancel"),
+    );
+  }),
+);
+
+bot.callbackQuery(/^garagem-guardar:(\d+)$/, (ctx) =>
+  withErrors(ctx, async () => {
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageReplyMarkup();
+    await guardar(ctx, Number(ctx.match[1]), "");
+  }),
+);
+
+bot.callbackQuery(/^garagem-desfazer:(.+)$/, (ctx) =>
+  withErrors(ctx, async () => {
+    await desfazerAporte(ctx.match[1]);
+    await ctx.answerCallbackQuery({ text: "Desfeito" });
+    await ctx.editMessageText("↩️ Lançamento desfeito — nada ficou no fundo.");
+  }),
+);
+
+bot.callbackQuery(/^garagem-parcela:(1|-1)$/, (ctx) =>
+  withErrors(ctx, async () => {
+    const pagas = ctx.match[1] === "1" ? 1 : -1;
+    const { restantes, total } = await pagarParcela(pagas);
+    await ctx.answerCallbackQuery();
+    const texto =
+      pagas === -1
+        ? `↩️ Desfeito. Faltam <b>${restantes}</b> de ${total} parcelas.`
+        : restantes === 0
+          ? "🎉 <b>Uno quitado!</b> Daqui pra frente a parcela vai pro fundo."
+          : `✅ Parcela marcada. Faltam <b>${restantes}</b> de ${total}.`;
+    await ctx.editMessageText(texto, {
+      parse_mode: "HTML",
+      reply_markup: pagas === 1 ? new InlineKeyboard().text("↩️ Desfazer", "garagem-parcela:-1") : undefined,
+    });
+  }),
+);
 
 bot.command("claude", async (ctx) => {
   const prompt = ctx.match.trim();
@@ -238,6 +336,16 @@ startScheduler([
     ...parseTime(config.weeklySummaryTime),
     weekday: 0,
     run: async () => sendToOwner(await weeklySummary()),
+  },
+  {
+    name: "lembrete do fundo da troca",
+    ...parseTime(config.garagemReminderTime),
+    weekday: 5,
+    run: async () => {
+      if (!garagemAtivo()) return;
+      const message = await lembreteSemana();
+      if (message) await sendToOwner(message);
+    },
   },
   {
     name: "limpeza de relatórios da balança",

@@ -29,6 +29,12 @@ export const config = {
   scaleReportsRetentionDays: Number(process.env.SCALE_REPORTS_RETENTION_DAYS ?? 30),
   // Role that may only write body_composition_logs and body_weight_logs.
   koalaFitWriterDatabaseUrl: required("KOALA_FIT_WRITER_DATABASE_URL"),
+  // Garagem (fundo da troca de carro): API interna e chave do bot. Sem a
+  // chave, os comandos do Garagem só avisam que não estão configurados.
+  garagemUrl: process.env.GARAGEM_URL ?? "http://garagem:3003",
+  garagemBotChave: process.env.GARAGEM_BOT_CHAVE ?? "",
+  // Sextas: lembrete quando a semana do fundo ainda não fechou.
+  garagemReminderTime: process.env.GARAGEM_REMINDER_TIME ?? "19:00",
   dailySummaryTime: process.env.DAILY_SUMMARY_TIME ?? "08:00",
   trainingReminderTime: process.env.TRAINING_REMINDER_TIME ?? "18:00",
   // Sundays.
