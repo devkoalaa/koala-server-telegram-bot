@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build image
-        run: docker compose build
+        run: docker compose build --pull
 
       - name: Start bot
         run: docker compose up -d
