@@ -4,6 +4,7 @@ import { askClaude, claudeBusy, splitMessage } from "./claude.ts";
 import { backupMessage, dailySummaryMessage, logsMessage, statusMessage } from "./commands.ts";
 import { containerName, listContainers, restartContainer } from "./docker.ts";
 import { trainingReminder, weeklySummary } from "./fitness.ts";
+import { dayMessage, foodEnabled, logFood, undoFood, type FoodImage } from "./food.ts";
 import { escapeHtml } from "./format.ts";
 import {
   agoraMessage,
@@ -39,6 +40,7 @@ const COMMANDS = [
   { command: "restart", description: "Reinicia um container, com confirmação — ex.: /restart koala-fit" },
   { command: "resumo", description: "Resumo do servidor (o mesmo que chega todo dia de manhã)" },
   { command: "semana", description: "Resumo da semana de treinos no Koala Fit" },
+  { command: "dieta", description: "O que você comeu hoje e quanto falta para as metas" },
   { command: "agora", description: "O que fazer agora e para onde vai o próximo pagamento (Garagem)" },
   { command: "guardar", description: "Guarda dinheiro no fundo da troca — ex.: /guardar 1000 semana automotiva" },
   { command: "retirar", description: "Tira dinheiro do fundo — ex.: /retirar 800 serasa" },
@@ -90,6 +92,7 @@ bot.command(["start", "help"], (ctx) =>
       ...COMMANDS.map((c) => `/${c.command} — ${escapeHtml(c.description)}`),
       "",
       "💰 Garagem: /agora, /guardar, /retirar, /fundo e /parcela.",
+      "🍽️ Mande o que comeu ou bebeu, em texto ou foto (com ou sem descrição), para registrar no diário.",
       "⚖️ Mande o print do relatório da balança (de preferência como arquivo) para salvar no Koala Fit.",
     ].join("\n"),
   ),
@@ -102,6 +105,12 @@ bot.command("backup", (ctx) => withErrors(ctx, async () => reply(ctx, await back
 bot.command("resumo", (ctx) => withErrors(ctx, async () => reply(ctx, await dailySummaryMessage())));
 
 bot.command("semana", (ctx) => withErrors(ctx, async () => reply(ctx, await weeklySummary())));
+
+bot.command("dieta", (ctx) =>
+  withErrors(ctx, async () => {
+    await ctx.reply(await dayMessage(), { parse_mode: "HTML", link_preview_options: { is_disabled: true } });
+  }),
+);
 
 // ---------- Garagem (fundo da troca de carro) ----------
 
@@ -211,33 +220,101 @@ bot.command("claude", async (ctx) => {
     .catch((err) => console.error("Falha ao responder /claude:", err));
 });
 
-// Scale report: a photo, or an image sent as a file (keeps full resolution).
+// ---------- Imagens: comida ou relatório da balança ----------
+
+const FOOD_MEDIA_TYPES: Record<string, FoodImage["mediaType"]> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  gif: "image/gif",
+  webp: "image/webp",
+};
+// Limite da API do Claude por imagem.
+const MAX_FOOD_IMAGE_BYTES = 5 * 1024 * 1024;
+
+async function readScaleReport(ctx: Context, url: string, filePath: string, messageId: number, fromPhoto: boolean) {
+  if (scaleBusy()) return reply(ctx, "⏳ Ainda estou lendo o relatório anterior, espera ele terminar.");
+  const id = await saveReportImage(url, filePath, messageId);
+  await reply(ctx, "⚖️ Lendo o relatório da balança…");
+  // Not awaited, like /claude: reading takes a while and would block other updates.
+  extractReport(id)
+    .then((report) =>
+      reply(
+        ctx,
+        reportMessage(report, fromPhoto),
+        new InlineKeyboard().text("✅ Salvar", `scale-save:${id}`).text("❌ Descartar", `scale-discard:${id}`),
+      ),
+    )
+    .catch((err) => reply(ctx, `❌ Não consegui ler o relatório: ${escapeHtml(err instanceof Error ? err.message : String(err))}`))
+    .catch((err) => console.error("Falha ao responder relatório da balança:", err));
+}
+
+/**
+ * Registra comida a partir de texto e/ou imagem. Roda sem await (a API leva
+ * alguns segundos); se o Claude disser que a imagem é um relatório da balança,
+ * cai no fluxo da balança.
+ */
+function registerFood(ctx: Context, text: string, image: FoodImage | null, messageId: number, onScaleReport?: () => Promise<void>) {
+  logFood(text, image, messageId)
+    .then(async (result) => {
+      if (result.kind === "scale_report") {
+        if (onScaleReport) return onScaleReport();
+        return reply(ctx, "Isso parece um relatório da balança.");
+      }
+      if (result.kind === "other") return reply(ctx, result.html);
+      await ctx.reply(result.html, {
+        parse_mode: "HTML",
+        reply_parameters: { message_id: messageId },
+        reply_markup: new InlineKeyboard().text("↩️ Desfazer", `food-undo:${messageId}`),
+      });
+    })
+    .catch((err) => reply(ctx, `❌ Não consegui registrar: ${escapeHtml(err instanceof Error ? err.message : String(err))}`))
+    .catch((err) => console.error("Falha ao responder registro de comida:", err));
+}
+
+// A photo, or an image sent as a file (keeps full resolution). With the
+// Claude API configured, photos and captioned images go through the food
+// diary first; an image file without caption is still treated as a scale
+// report straight away (the help text asks for scale prints as files).
 bot.on(["message:photo", "message:document"], async (ctx) => {
   const doc = ctx.message.document;
   if (doc && !doc.mime_type?.startsWith("image/")) {
-    return reply(ctx, "Pra importar o relatório da balança, mande uma imagem (foto ou arquivo).");
+    return reply(ctx, "Mande uma imagem (foto ou arquivo): comida para o diário ou o relatório da balança.");
   }
-  if (scaleBusy()) return reply(ctx, "⏳ Ainda estou lendo o relatório anterior, espera ele terminar.");
+  const caption = ctx.message.caption ?? "";
+  const messageId = ctx.message.message_id;
 
   await withErrors(ctx, async () => {
     const file = await ctx.getFile();
     if (!file.file_path) throw new Error("O Telegram não devolveu o arquivo");
-    const url = `https://api.telegram.org/file/bot${config.botToken}/${file.file_path}`;
-    const id = await saveReportImage(url, file.file_path, ctx.message.message_id);
-    await reply(ctx, "⚖️ Lendo o relatório da balança…");
-    // Not awaited, like /claude: reading takes a while and would block other updates.
-    extractReport(id)
-      .then((report) =>
-        reply(
-          ctx,
-          reportMessage(report, !doc),
-          new InlineKeyboard().text("✅ Salvar", `scale-save:${id}`).text("❌ Descartar", `scale-discard:${id}`),
-        ),
-      )
-      .catch((err) => reply(ctx, `❌ Não consegui ler o relatório: ${escapeHtml(err instanceof Error ? err.message : String(err))}`))
-      .catch((err) => console.error("Falha ao responder relatório da balança:", err));
+    const filePath = file.file_path;
+    const url = `https://api.telegram.org/file/bot${config.botToken}/${filePath}`;
+
+    if (!foodEnabled() || (doc && !caption.trim())) {
+      return readScaleReport(ctx, url, filePath, messageId, !doc);
+    }
+
+    const mediaType = FOOD_MEDIA_TYPES[filePath.split(".").pop()?.toLowerCase() ?? ""] ?? "image/jpeg";
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Download da imagem falhou (HTTP ${res.status})`);
+    const data = Buffer.from(await res.arrayBuffer());
+    if (data.length > MAX_FOOD_IMAGE_BYTES) {
+      return reply(ctx, "Imagem grande demais (máx. 5 MB). Mande como foto, não como arquivo.");
+    }
+    await ctx.replyWithChatAction("typing");
+    registerFood(ctx, caption, { data, mediaType }, messageId, () => readScaleReport(ctx, url, filePath, messageId, !doc));
   });
 });
+
+bot.callbackQuery(/^food-undo:(\d+)$/, (ctx) =>
+  withErrors(ctx, async () => {
+    const removed = await undoFood(Number(ctx.match[1]));
+    await ctx.answerCallbackQuery({ text: removed > 0 ? "Desfeito" : "Já não estava registrado" });
+    await ctx.editMessageText(
+      removed > 0 ? `↩️ Desfeito: ${removed === 1 ? "o item saiu" : `os ${removed} itens saíram`} do diário.` : "↩️ Nada a desfazer.",
+    );
+  }),
+);
 
 bot.callbackQuery(/^scale-save:(.+)$/, (ctx) =>
   withErrors(ctx, async () => {
@@ -304,6 +381,17 @@ bot.callbackQuery(/^restart-yes:(.+)$/, (ctx) =>
 bot.callbackQuery("cancel", async (ctx) => {
   await ctx.answerCallbackQuery();
   await ctx.editMessageText("Cancelado.");
+});
+
+// Por último, depois de todos os comandos: texto solto (sem comando) = algo que comeu ou bebeu, ou uma pergunta sobre a dieta.
+bot.on("message:text", async (ctx) => {
+  const text = ctx.message.text;
+  if (text.startsWith("/")) return reply(ctx, "Comando desconhecido. Veja /help.");
+  if (!foodEnabled()) {
+    return reply(ctx, "⚠️ Diário alimentar não configurado: falta ANTHROPIC_API_KEY no .env do bot.");
+  }
+  await ctx.replyWithChatAction("typing");
+  registerFood(ctx, text, null, ctx.message.message_id);
 });
 
 bot.catch((err) => console.error("Erro não tratado:", err.error));

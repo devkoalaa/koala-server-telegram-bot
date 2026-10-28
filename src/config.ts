@@ -27,8 +27,13 @@ export const config = {
   scaleReportsDir: process.env.SCALE_REPORTS_DIR ?? "/scale-reports",
   scaleSshKey: process.env.SCALE_SSH_KEY ?? "/ssh/id_ed25519_scale",
   scaleReportsRetentionDays: Number(process.env.SCALE_REPORTS_RETENTION_DAYS ?? 30),
-  // Role that may only write body_composition_logs and body_weight_logs.
+  // Role that may only write body_composition_logs, body_weight_logs and
+  // food_logs (diário alimentar).
   koalaFitWriterDatabaseUrl: required("KOALA_FIT_WRITER_DATABASE_URL"),
+  // Diário alimentar (src/food.ts): chave da API do Claude. Sem ela, texto
+  // solto é ignorado e toda imagem vai para o relatório da balança, como antes.
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
+  foodModel: process.env.FOOD_MODEL ?? "claude-opus-5-5",
   // Garagem (fundo da troca de carro): API interna e chave do bot. Sem a
   // chave, os comandos do Garagem só avisam que não estão configurados.
   garagemUrl: process.env.GARAGEM_URL ?? "http://garagem:3003",

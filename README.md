@@ -11,6 +11,7 @@ definido em `ALLOWED_CHAT_ID`; mensagens de qualquer outra pessoa são ignoradas
 | `/restart [container]` | Reinicia um container após confirmação; sem argumento, mostra a lista |
 | `/resumo` | Resumo do servidor sob demanda |
 | `/semana` | Resumo da semana de treinos no Koala Fit sob demanda |
+| `/dieta` | O que foi registrado hoje no diário alimentar e quanto falta para as metas |
 | `/claude <pergunta>` | Pergunta ao Claude Code do servidor sobre o código dos projetos — **só leitura** |
 
 ### Sobre o /claude
@@ -34,8 +35,32 @@ Isolamento: o bot entra por SSH com uma segunda chave, presa a
 `~/bin/claude-scale`. Esse script tem o prompt e o JSON Schema fixos, recebe só
 o nome do arquivo e roda `claude -p` com apenas a ferramenta `Read`, liberada
 só para aquela imagem. Quem grava no banco é o bot, com o usuário
-`koala_fit_scale` (INSERT/UPDATE apenas nessas duas tabelas), depois de validar
+`koala_fit_scale` (INSERT/UPDATE apenas nessas duas tabelas, além do diário
+alimentar abaixo), depois de validar
 faixas plausíveis de cada número e da sua confirmação.
+
+### Diário alimentar
+
+Mande o que comeu ou bebeu: texto (“almocei arroz, feijão e um bife”), foto do
+prato ou foto com descrição. A descrição tem prioridade sobre o que aparece na
+foto. A API do Claude (`ANTHROPIC_API_KEY`, modelo em `FOOD_MODEL`, padrão
+`claude-opus-5-5`) separa os itens, estima as porções e devolve calorias,
+macros, fibra e água em JSON estruturado. O bot confere faixas plausíveis e
+grava direto em `food_logs` do Koala Fit, ligando os itens ao id da mensagem.
+A resposta traz o total do dia contra as metas (definidas na aba Dieta do app)
+e um botão ↩️ Desfazer, que apaga os itens daquela mensagem. Perguntas em texto
+(“quanto falta de proteína?”) são respondidas com base no dia.
+
+Como a foto não confunde com a balança:
+
+- **imagem mandada como arquivo, sem legenda** → vai direto para a balança, como antes;
+- **foto, ou imagem com legenda** → vai para o diário. Se o Claude reconhecer um
+  relatório de balança, ela segue para o fluxo da balança acima;
+- **sem `ANTHROPIC_API_KEY`** → toda imagem vai para a balança, e texto solto
+  só recebe o aviso de que falta configurar.
+
+O mesmo usuário `koala_fit_scale` grava o diário (SELECT/INSERT/DELETE em
+`food_logs`, concedido pela migration do koala-fit).
 
 ## Mensagens automáticas
 
