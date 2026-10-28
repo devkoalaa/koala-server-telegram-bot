@@ -195,7 +195,11 @@ async function analyze(text: string, image: FoodImage | null, goals: Goals, rows
   } catch (err) {
     if (err instanceof Anthropic.AuthenticationError) throw new Error("A chave da API do Claude (ANTHROPIC_API_KEY) foi recusada.");
     if (err instanceof Anthropic.RateLimitError) throw new Error("Limite de uso da API do Claude atingido. Tente de novo daqui a pouco.");
-    if (err instanceof Anthropic.APIError) throw new Error(`A API do Claude falhou (HTTP ${err.status ?? "?"}).`);
+    if (err instanceof Anthropic.APIError) {
+      console.error("API do Claude falhou:", err.message);
+      const detail = (err.error as { error?: { message?: string } } | undefined)?.error?.message;
+      throw new Error(`A API do Claude falhou (HTTP ${err.status ?? "?"})${detail ? `: ${detail}` : "."}`);
+    }
     if (err instanceof Error && err.name.includes("Zod")) throw new Error("O Claude não devolveu uma análise válida.");
     throw err;
   }
