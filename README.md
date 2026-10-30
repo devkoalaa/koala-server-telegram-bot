@@ -12,6 +12,7 @@ definido em `ALLOWED_CHAT_ID`; mensagens de qualquer outra pessoa são ignoradas
 | `/resumo` | Resumo do servidor sob demanda |
 | `/semana` | Resumo da semana de treinos no Koala Fit sob demanda |
 | `/dieta` | O que foi registrado hoje no diário alimentar e quanto falta para as metas |
+| `/produtos` | Produtos com rótulo cadastrado; um botão por produto para marcar que acabou |
 | `/claude <pergunta>` | Pergunta ao Claude Code do servidor sobre o código dos projetos — **só leitura** |
 
 ### Sobre o /claude
@@ -59,8 +60,19 @@ Como a foto não confunde com a balança:
 - **sem `ANTHROPIC_API_KEY`** → toda imagem vai para a balança, e texto solto
   só recebe o aviso de que falta configurar.
 
+**Produtos com rótulo.** A foto da tabela nutricional de um produto (sem dizer
+que comeu) cadastra o produto em `food_products`, com nome, categoria
+("iogurte", "pão de forma"...), porção e valores por 100 g. A lista ativa vai no
+contexto de toda análise, e o Claude usa esses números quando o produto é citado,
+mesmo de forma genérica ("um copo de iogurte"). Cadastrar outro produto da mesma
+categoria arquiva o anterior (troca de marca), a menos que a legenda diga que os
+dois continuam em uso. O Desfazer do cadastro devolve o anterior. `/produtos`
+lista o que está ativo, com um botão para marcar o que acabou. Mande o rótulo
+como foto, ou como arquivo com legenda: arquivo sem legenda vai para a balança.
+
 O mesmo usuário `koala_fit_scale` grava o diário (SELECT/INSERT/DELETE em
-`food_logs`, concedido pela migration do koala-fit).
+`food_logs` e SELECT/INSERT/UPDATE em `food_products`, concedidos pelas
+migrations do koala-fit).
 
 ## Mensagens automáticas
 

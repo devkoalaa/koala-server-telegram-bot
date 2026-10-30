@@ -4,7 +4,16 @@ import { askClaude, claudeBusy, splitMessage } from "./claude.ts";
 import { backupMessage, dailySummaryMessage, logsMessage, statusMessage } from "./commands.ts";
 import { containerName, listContainers, restartContainer } from "./docker.ts";
 import { trainingReminder, weeklySummary } from "./fitness.ts";
-import { dayMessage, foodEnabled, logFood, undoFood, type FoodImage } from "./food.ts";
+import {
+  archiveProduct,
+  dayMessage,
+  foodEnabled,
+  logFood,
+  productsList,
+  undoFood,
+  undoProduct,
+  type FoodImage,
+} from "./food.ts";
 import { escapeHtml } from "./format.ts";
 import {
   agoraMessage,
@@ -41,6 +50,7 @@ const COMMANDS = [
   { command: "resumo", description: "Resumo do servidor (o mesmo que chega todo dia de manhã)" },
   { command: "semana", description: "Resumo da semana de treinos no Koala Fit" },
   { command: "dieta", description: "O que você comeu hoje e quanto falta para as metas" },
+  { command: "produtos", description: "Produtos com rótulo cadastrado (marque o que acabou)" },
   { command: "agora", description: "O que fazer agora e para onde vai o próximo pagamento (Garagem)" },
   { command: "guardar", description: "Guarda dinheiro no fundo da troca — ex.: /guardar 1000 semana automotiva" },
   { command: "retirar", description: "Tira dinheiro do fundo — ex.: /retirar 800 serasa" },
@@ -93,6 +103,7 @@ bot.command(["start", "help"], (ctx) =>
       "",
       "💰 Garagem: /agora, /guardar, /retirar, /fundo e /parcela.",
       "🍽️ Mande o que comeu ou bebeu, em texto ou foto (com ou sem descrição), para registrar no diário.",
+      "📦 Mande a foto da tabela nutricional de um produto para cadastrar; depois é só citar ele.",
       "⚖️ Mande o print do relatório da balança (de preferência como arquivo) para salvar no Koala Fit.",
     ].join("\n"),
   ),
@@ -109,6 +120,38 @@ bot.command("semana", (ctx) => withErrors(ctx, async () => reply(ctx, await week
 bot.command("dieta", (ctx) =>
   withErrors(ctx, async () => {
     await ctx.reply(await dayMessage(), { parse_mode: "HTML", link_preview_options: { is_disabled: true } });
+  }),
+);
+
+async function productsKeyboard(): Promise<{ html: string; keyboard?: InlineKeyboard }> {
+  const { html, products } = await productsList();
+  if (products.length === 0) return { html };
+  const keyboard = new InlineKeyboard();
+  for (const p of products) keyboard.text(`🗑️ Acabou: ${p.name}`, `product-archive:${p.id}`).row();
+  return { html, keyboard };
+}
+
+bot.command("produtos", (ctx) =>
+  withErrors(ctx, async () => {
+    const { html, keyboard } = await productsKeyboard();
+    await reply(ctx, html, keyboard);
+  }),
+);
+
+bot.callbackQuery(/^product-archive:([0-9a-f-]{36})$/, (ctx) =>
+  withErrors(ctx, async () => {
+    const name = await archiveProduct(ctx.match[1]);
+    await ctx.answerCallbackQuery({ text: name ? `${name} saiu da lista` : "Já tinha saído da lista" });
+    const { html, keyboard } = await productsKeyboard();
+    await ctx.editMessageText(html, { parse_mode: "HTML", reply_markup: keyboard });
+  }),
+);
+
+bot.callbackQuery(/^product-undo:([0-9a-f-]{36})$/, (ctx) =>
+  withErrors(ctx, async () => {
+    const undone = await undoProduct(ctx.match[1]);
+    await ctx.answerCallbackQuery({ text: undone ? "Desfeito" : "Já não estava cadastrado" });
+    await ctx.editMessageText(undone ? "↩️ Cadastro desfeito: a lista de produtos voltou a ser a de antes." : "↩️ Nada a desfazer.");
   }),
 );
 
@@ -262,6 +305,13 @@ function registerFood(ctx: Context, text: string, image: FoodImage | null, messa
         return reply(ctx, "Isso parece um relatório da balança.");
       }
       if (result.kind === "other") return reply(ctx, result.html);
+      if (result.kind === "product") {
+        return ctx.reply(result.html, {
+          parse_mode: "HTML",
+          reply_parameters: { message_id: messageId },
+          reply_markup: new InlineKeyboard().text("↩️ Desfazer", `product-undo:${result.productId}`),
+        });
+      }
       await ctx.reply(result.html, {
         parse_mode: "HTML",
         reply_parameters: { message_id: messageId },
