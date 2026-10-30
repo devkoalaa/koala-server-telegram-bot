@@ -68,7 +68,7 @@ Como estimar:
 
 Outros campos:
 - kind: "food" quando a mensagem relata algo que ele comeu ou bebeu. "scale_report" quando a imagem é um print de relatório de balança de bioimpedância (peso, gordura, músculo; o app OKOK costuma estar em chinês), e não comida. "other" para o resto: perguntas, conversa, foto sem comida. Em "scale_report" e "other", items fica vazio.
-- meal: uma destas refeições, escrita igual: ${MEALS.join(", ")}. Deduza do texto ("no almoço") ou da hora. null se não der para saber.
+- meal: uma destas refeições, escrita igual: ${MEALS.join(", ")}. Se ele disser a refeição ("no almoço"), use a dele. Senão, deduza pela hora só para comida de refeição e para o que vem junto dela (sobremesa, café ou suco logo depois). Use null (aparece como "Outros") para: bebida alcoólica, água, e item avulso mandado sozinho fora de uma refeição, como um belisco ou uma bebida bem depois de a refeição daquele horário já ter sido registrada.
 - eaten_at: preencha só se ele disser que foi em outra hora ou dia ("ontem no jantar", "às 7h"), no formato YYYY-MM-DDTHH:MM, horário de São Paulo. Senão, null.
 - reply: em português, de 1 a 3 frases curtas, sem markdown. Em "food", diga as suposições que fez (porção estimada, preparo) e, quando ajudar, uma observação curta sobre as metas do dia. Em "other", se for pergunta sobre a dieta, responda com base no que já foi registrado hoje e nas metas; se não for, diga que você registra comidas e bebidas. Se ele pedir para corrigir um registro anterior, registre o que ele mandou agora e diga para tocar em Desfazer no registro errado.
 
