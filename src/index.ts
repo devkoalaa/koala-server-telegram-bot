@@ -293,33 +293,51 @@ async function readScaleReport(ctx: Context, url: string, filePath: string, mess
 }
 
 /**
- * Registra comida a partir de texto e/ou imagem. Roda sem await (a API leva
- * alguns segundos); se o Claude disser que a imagem é um relatório da balança,
- * cai no fluxo da balança.
+ * Registra comida a partir de texto e/ou imagem. Responde na hora com
+ * "Analisando…" (mantendo o "digitando…" do Telegram aceso) e edita essa
+ * mesma mensagem com o resultado quando a API do Claude termina. Se o Claude
+ * disser que a imagem é um relatório da balança, cai no fluxo da balança.
  */
-function registerFood(ctx: Context, text: string, image: FoodImage | null, messageId: number, onScaleReport?: () => Promise<void>) {
-  logFood(text, image, messageId)
-    .then(async (result) => {
-      if (result.kind === "scale_report") {
-        if (onScaleReport) return onScaleReport();
-        return reply(ctx, "Isso parece um relatório da balança.");
-      }
-      if (result.kind === "other") return reply(ctx, result.html);
-      if (result.kind === "product") {
-        return ctx.reply(result.html, {
-          parse_mode: "HTML",
-          reply_parameters: { message_id: messageId },
-          reply_markup: new InlineKeyboard().text("↩️ Desfazer", `product-undo:${result.productId}`),
-        });
-      }
-      await ctx.reply(result.html, {
-        parse_mode: "HTML",
-        reply_parameters: { message_id: messageId },
-        reply_markup: new InlineKeyboard().text("↩️ Desfazer", `food-undo:${messageId}`),
-      });
-    })
-    .catch((err) => reply(ctx, `❌ Não consegui registrar: ${escapeHtml(err instanceof Error ? err.message : String(err))}`))
-    .catch((err) => console.error("Falha ao responder registro de comida:", err));
+async function registerFood(
+  ctx: Context,
+  text: string,
+  image: FoodImage | null,
+  messageId: number,
+  onScaleReport?: () => Promise<void>,
+) {
+  const chatId = ctx.chat!.id;
+  const status = await ctx.reply(image ? "📷 Analisando a foto…" : "🤔 Analisando…", {
+    reply_parameters: { message_id: messageId },
+  });
+  const edit = (html: string, keyboard?: InlineKeyboard) =>
+    ctx.api.editMessageText(chatId, status.message_id, html, {
+      parse_mode: "HTML",
+      reply_markup: keyboard,
+      link_preview_options: { is_disabled: true },
+    });
+  // O "digitando…" some sozinho em ~5 s; renova até a resposta chegar.
+  const typing = setInterval(() => ctx.replyWithChatAction("typing").catch(() => {}), 4_500);
+  await ctx.replyWithChatAction("typing").catch(() => {});
+
+  try {
+    const result = await logFood(text, image, messageId);
+    if (result.kind === "scale_report") {
+      await edit("⚖️ Isso é um relatório da balança.");
+      if (onScaleReport) await onScaleReport();
+    } else if (result.kind === "other") {
+      await edit(result.html);
+    } else if (result.kind === "product") {
+      await edit(result.html, new InlineKeyboard().text("↩️ Desfazer", `product-undo:${result.productId}`));
+    } else {
+      await edit(result.html, new InlineKeyboard().text("↩️ Desfazer", `food-undo:${messageId}`));
+    }
+  } catch (err) {
+    await edit(`❌ Não consegui registrar: ${escapeHtml(err instanceof Error ? err.message : String(err))}`).catch((e) =>
+      console.error("Falha ao responder registro de comida:", e),
+    );
+  } finally {
+    clearInterval(typing);
+  }
 }
 
 // A photo, or an image sent as a file (keeps full resolution). With the
@@ -351,8 +369,10 @@ bot.on(["message:photo", "message:document"], async (ctx) => {
     if (data.length > MAX_FOOD_IMAGE_BYTES) {
       return reply(ctx, "Imagem grande demais (máx. 5 MB). Mande como foto, não como arquivo.");
     }
-    await ctx.replyWithChatAction("typing");
-    registerFood(ctx, caption, { data, mediaType }, messageId, () => readScaleReport(ctx, url, filePath, messageId, !doc));
+    // Not awaited, like /claude: the API takes a few seconds and would block other updates.
+    void registerFood(ctx, caption, { data, mediaType }, messageId, () =>
+      readScaleReport(ctx, url, filePath, messageId, !doc),
+    ).catch((err) => console.error("Falha no registro de comida:", err));
   });
 });
 
@@ -440,8 +460,9 @@ bot.on("message:text", async (ctx) => {
   if (!foodEnabled()) {
     return reply(ctx, "⚠️ Diário alimentar não configurado: falta ANTHROPIC_API_KEY no .env do bot.");
   }
-  await ctx.replyWithChatAction("typing");
-  registerFood(ctx, text, null, ctx.message.message_id);
+  void registerFood(ctx, text, null, ctx.message.message_id).catch((err) =>
+    console.error("Falha no registro de comida:", err),
+  );
 });
 
 bot.catch((err) => console.error("Erro não tratado:", err.error));
