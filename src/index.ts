@@ -275,68 +275,101 @@ const FOOD_MEDIA_TYPES: Record<string, FoodImage["mediaType"]> = {
 // Limite da API do Claude por imagem.
 const MAX_FOOD_IMAGE_BYTES = 5 * 1024 * 1024;
 
-async function readScaleReport(ctx: Context, url: string, filePath: string, messageId: number, fromPhoto: boolean) {
-  if (scaleBusy()) return reply(ctx, "⏳ Ainda estou lendo o relatório anterior, espera ele terminar.");
-  const id = await saveReportImage(url, filePath, messageId);
-  await reply(ctx, "⚖️ Lendo o relatório da balança…");
-  // Not awaited, like /claude: reading takes a while and would block other updates.
-  extractReport(id)
-    .then((report) =>
-      reply(
-        ctx,
-        reportMessage(report, fromPhoto),
-        new InlineKeyboard().text("✅ Salvar", `scale-save:${id}`).text("❌ Descartar", `scale-discard:${id}`),
-      ),
-    )
-    .catch((err) => reply(ctx, `❌ Não consegui ler o relatório: ${escapeHtml(err instanceof Error ? err.message : String(err))}`))
-    .catch((err) => console.error("Falha ao responder relatório da balança:", err));
+type LoadingMessage = {
+  /** Troca o texto da mensagem de status (HTML), opcionalmente com botões. */
+  edit: (html: string, keyboard?: InlineKeyboard) => Promise<unknown>;
+  /** Apaga o "digitando…" mantido enquanto o trabalho roda. */
+  done: () => void;
+};
+
+/**
+ * Mensagem de "carregando" respondendo à do usuário, que depois é editada com
+ * o resultado. Mantém o "digitando…" do Telegram aceso (ele some sozinho em
+ * ~5 s) até done().
+ */
+async function loadingMessage(ctx: Context, replyTo: number, text: string): Promise<LoadingMessage> {
+  const chatId = ctx.chat!.id;
+  const msg = await ctx.reply(text, { reply_parameters: { message_id: replyTo } });
+  const typing = setInterval(() => ctx.replyWithChatAction("typing").catch(() => {}), 4_500);
+  await ctx.replyWithChatAction("typing").catch(() => {});
+  return {
+    edit: (html, keyboard) =>
+      ctx.api.editMessageText(chatId, msg.message_id, html, {
+        parse_mode: "HTML",
+        reply_markup: keyboard,
+        link_preview_options: { is_disabled: true },
+      }),
+    done: () => clearInterval(typing),
+  };
+}
+
+/**
+ * Lê o relatório da balança. Usa a mensagem de status recebida (quando a
+ * imagem veio do diário alimentar) ou cria uma, e a edita com o resultado.
+ */
+async function readScaleReport(
+  ctx: Context,
+  url: string,
+  filePath: string,
+  messageId: number,
+  fromPhoto: boolean,
+  existing?: LoadingMessage,
+) {
+  if (scaleBusy()) {
+    const busy = "⏳ Ainda estou lendo o relatório anterior, espera ele terminar.";
+    if (existing) return existing.edit(busy);
+    return reply(ctx, busy);
+  }
+  const status = existing ?? (await loadingMessage(ctx, messageId, "⚖️ Lendo o relatório da balança…"));
+  if (existing) await existing.edit("⚖️ Isso é um relatório da balança. Lendo…");
+  try {
+    const id = await saveReportImage(url, filePath, messageId);
+    const report = await extractReport(id);
+    await status.edit(
+      reportMessage(report, fromPhoto),
+      new InlineKeyboard().text("✅ Salvar", `scale-save:${id}`).text("❌ Descartar", `scale-discard:${id}`),
+    );
+  } catch (err) {
+    await status
+      .edit(`❌ Não consegui ler o relatório: ${escapeHtml(err instanceof Error ? err.message : String(err))}`)
+      .catch((e) => console.error("Falha ao responder relatório da balança:", e));
+  } finally {
+    status.done();
+  }
 }
 
 /**
  * Registra comida a partir de texto e/ou imagem. Responde na hora com
- * "Analisando…" (mantendo o "digitando…" do Telegram aceso) e edita essa
- * mesma mensagem com o resultado quando a API do Claude termina. Se o Claude
- * disser que a imagem é um relatório da balança, cai no fluxo da balança.
+ * "Analisando…" e edita essa mesma mensagem com o resultado quando a API do
+ * Claude termina. Se o Claude disser que a imagem é um relatório da balança,
+ * a mesma mensagem segue para o fluxo da balança.
  */
 async function registerFood(
   ctx: Context,
   text: string,
   image: FoodImage | null,
   messageId: number,
-  onScaleReport?: () => Promise<void>,
+  onScaleReport?: (status: LoadingMessage) => Promise<unknown>,
 ) {
-  const chatId = ctx.chat!.id;
-  const status = await ctx.reply(image ? "📷 Analisando a foto…" : "🤔 Analisando…", {
-    reply_parameters: { message_id: messageId },
-  });
-  const edit = (html: string, keyboard?: InlineKeyboard) =>
-    ctx.api.editMessageText(chatId, status.message_id, html, {
-      parse_mode: "HTML",
-      reply_markup: keyboard,
-      link_preview_options: { is_disabled: true },
-    });
-  // O "digitando…" some sozinho em ~5 s; renova até a resposta chegar.
-  const typing = setInterval(() => ctx.replyWithChatAction("typing").catch(() => {}), 4_500);
-  await ctx.replyWithChatAction("typing").catch(() => {});
-
+  const status = await loadingMessage(ctx, messageId, image ? "📷 Analisando a foto…" : "🤔 Analisando…");
   try {
     const result = await logFood(text, image, messageId);
     if (result.kind === "scale_report") {
-      await edit("⚖️ Isso é um relatório da balança.");
-      if (onScaleReport) await onScaleReport();
+      if (onScaleReport) return await onScaleReport(status);
+      await status.edit("⚖️ Isso parece um relatório da balança.");
     } else if (result.kind === "other") {
-      await edit(result.html);
+      await status.edit(result.html);
     } else if (result.kind === "product") {
-      await edit(result.html, new InlineKeyboard().text("↩️ Desfazer", `product-undo:${result.productId}`));
+      await status.edit(result.html, new InlineKeyboard().text("↩️ Desfazer", `product-undo:${result.productId}`));
     } else {
-      await edit(result.html, new InlineKeyboard().text("↩️ Desfazer", `food-undo:${messageId}`));
+      await status.edit(result.html, new InlineKeyboard().text("↩️ Desfazer", `food-undo:${messageId}`));
     }
   } catch (err) {
-    await edit(`❌ Não consegui registrar: ${escapeHtml(err instanceof Error ? err.message : String(err))}`).catch((e) =>
-      console.error("Falha ao responder registro de comida:", e),
-    );
+    await status
+      .edit(`❌ Não consegui registrar: ${escapeHtml(err instanceof Error ? err.message : String(err))}`)
+      .catch((e) => console.error("Falha ao responder registro de comida:", e));
   } finally {
-    clearInterval(typing);
+    status.done();
   }
 }
 
@@ -359,7 +392,11 @@ bot.on(["message:photo", "message:document"], async (ctx) => {
     const url = `https://api.telegram.org/file/bot${config.botToken}/${filePath}`;
 
     if (!foodEnabled() || (doc && !caption.trim())) {
-      return readScaleReport(ctx, url, filePath, messageId, !doc);
+      // Not awaited, like /claude: reading takes a while and would block other updates.
+      void readScaleReport(ctx, url, filePath, messageId, !doc).catch((err) =>
+        console.error("Falha no relatório da balança:", err),
+      );
+      return;
     }
 
     const mediaType = FOOD_MEDIA_TYPES[filePath.split(".").pop()?.toLowerCase() ?? ""] ?? "image/jpeg";
@@ -370,8 +407,8 @@ bot.on(["message:photo", "message:document"], async (ctx) => {
       return reply(ctx, "Imagem grande demais (máx. 5 MB). Mande como foto, não como arquivo.");
     }
     // Not awaited, like /claude: the API takes a few seconds and would block other updates.
-    void registerFood(ctx, caption, { data, mediaType }, messageId, () =>
-      readScaleReport(ctx, url, filePath, messageId, !doc),
+    void registerFood(ctx, caption, { data, mediaType }, messageId, (status) =>
+      readScaleReport(ctx, url, filePath, messageId, !doc, status),
     ).catch((err) => console.error("Falha no registro de comida:", err));
   });
 });
@@ -390,13 +427,19 @@ bot.callbackQuery(/^scale-save:(.+)$/, (ctx) =>
   withErrors(ctx, async () => {
     const saved = await savePendingReport(ctx.match[1]);
     await ctx.answerCallbackQuery();
-    await ctx.editMessageReplyMarkup();
-    await reply(
-      ctx,
-      saved
-        ? '✅ Salvo no Koala Fit. <a href="https://fit.devkoala.com/evolucao">Ver evolução</a>'
-        : "⌛ Esse relatório expirou (o bot reiniciou). Mande a imagem de novo.",
-    );
+    const note = saved ? "✅ Salvo no Koala Fit." : "⌛ Esse relatório expirou (o bot reiniciou). Mande a imagem de novo.";
+    const msg = ctx.callbackQuery.message;
+    // Acrescenta o resultado ao próprio relatório; as entities mantêm a
+    // formatação original, já que o texto novo só entra no fim.
+    if (msg && "text" in msg && msg.text) {
+      await ctx.editMessageText(`${msg.text}\n\n${note}`, {
+        entities: msg.entities,
+        reply_markup: saved ? new InlineKeyboard().url("📈 Ver evolução", "https://fit.devkoala.com/evolucao") : undefined,
+      });
+    } else {
+      await ctx.editMessageReplyMarkup();
+      await reply(ctx, note);
+    }
   }),
 );
 
