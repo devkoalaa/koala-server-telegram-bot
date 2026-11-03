@@ -523,7 +523,7 @@ async function sendToOwner(text: string, html = true) {
   });
 }
 
-startNotifyServer(config.notifyPort, sendToOwner);
+startNotifyServer(config.notifyPort, sendToOwner, dailySummaryMessage);
 startSiteChecks((html) => sendToOwner(html));
 
 if (garagemAtivo()) {

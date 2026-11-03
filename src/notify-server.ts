@@ -6,13 +6,23 @@ import http from "node:http";
 //
 //   curl -fsS localhost:8081/notify -H 'content-type: application/json' \
 //        -d '{"text":"oi"}'            # "html": true enables HTML formatting
+//
+// GET /resumo devolve o resumo diário (o mesmo do Telegram) em JSON {html}: o
+// jornal do puffle (Club Penguin) usa como edição do dia, pela rede "db".
 
 type Send = (text: string, html: boolean) => Promise<void>;
+type Resumo = () => Promise<string>;
 
 const MAX_BODY_BYTES = 64 * 1024;
 
-export function startNotifyServer(port: number, send: Send) {
+export function startNotifyServer(port: number, send: Send, resumo?: Resumo) {
   const server = http.createServer((req, res) => {
+    if (req.method === "GET" && req.url === "/resumo" && resumo) {
+      resumo()
+        .then((html) => res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ html })))
+        .catch((err) => res.writeHead(500, { "content-type": "text/plain" }).end(String(err)));
+      return;
+    }
     if (req.method !== "POST" || req.url !== "/notify") {
       res.writeHead(404).end();
       return;
