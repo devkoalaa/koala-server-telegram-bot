@@ -42,6 +42,7 @@ const SITES: Site[] = [
   { name: "Rádio — transmissão", url: "https://radio.devkoala.com/api/nowplaying/koala", check: jsonField("is_online") },
   { name: "Rádio — estúdio", url: "https://radio.devkoala.com/studio-api/health", check: jsonField("ok") },
   { name: "Relay do Automotiva", url: "https://relay-automotiva.devkoala.com/ws", websocket: true },
+  { name: "Koala RP Lab", url: "https://koala-rp-lab.devkoala.com/info.json", check: (p) => (p.body.includes('"koala-core"') ? null : "FXServer sem o koala-core") },
 ];
 
 type State = {
