@@ -37,6 +37,8 @@ export const config = {
   // Garagem (fundo da troca de carro): API interna e chave do bot. Sem a
   // chave, os comandos do Garagem só avisam que não estão configurados.
   garagemUrl: process.env.GARAGEM_URL ?? "http://garagem:3003",
+  // Koala RP Lab (FXServer) pela rede "db": /rp lê info.json e players.json.
+  rpLabUrl: process.env.RP_LAB_URL ?? "http://koala-rp-lab:30120",
   garagemBotChave: process.env.GARAGEM_BOT_CHAVE ?? "",
   // Sextas: lembrete quando a semana do fundo ainda não fechou.
   garagemReminderTime: process.env.GARAGEM_REMINDER_TIME ?? "19:00",

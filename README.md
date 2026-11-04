@@ -13,6 +13,7 @@ definido em `ALLOWED_CHAT_ID`; mensagens de qualquer outra pessoa são ignoradas
 | `/semana` | Resumo da semana de treinos no Koala Fit sob demanda |
 | `/dieta` | O que foi registrado hoje no diário alimentar e quanto falta para as metas |
 | `/produtos` | Produtos com rótulo cadastrado; um botão por produto para marcar que acabou |
+| `/rp` | Koala RP Lab (FiveM): quem está online, versão e endereço; entradas e saídas chegam sozinhas pelo `/notify` |
 | `/claude <pergunta>` | Pergunta ao Claude Code do servidor sobre o código dos projetos — **só leitura** |
 
 ### Sobre o /claude

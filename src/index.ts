@@ -2,6 +2,7 @@ import { Bot, InlineKeyboard, type Context } from "grammy";
 import { config } from "./config.ts";
 import { askClaude, claudeBusy, splitMessage } from "./claude.ts";
 import { backupMessage, dailySummaryMessage, logsMessage, statusMessage } from "./commands.ts";
+import { rpMessage } from "./rp.ts";
 import { containerName, listContainers, restartContainer } from "./docker.ts";
 import { trainingReminder, weeklySummary } from "./fitness.ts";
 import {
@@ -56,6 +57,7 @@ const COMMANDS = [
   { command: "retirar", description: "Tira dinheiro do fundo — ex.: /retirar 800 serasa" },
   { command: "fundo", description: "Como está o fundo da troca de carro (Garagem)" },
   { command: "parcela", description: "Marca uma parcela do Uno como paga" },
+  { command: "rp", description: "Koala RP Lab (FiveM): quem está online e a versão" },
   { command: "claude", description: "Pergunta ao Claude sobre o código dos projetos (só leitura)" },
 ];
 
@@ -112,6 +114,8 @@ bot.command(["start", "help"], (ctx) =>
 bot.command("status", (ctx) => withErrors(ctx, async () => reply(ctx, await statusMessage())));
 
 bot.command("backup", (ctx) => withErrors(ctx, async () => reply(ctx, await backupMessage())));
+
+bot.command("rp", (ctx) => withErrors(ctx, async () => reply(ctx, await rpMessage())));
 
 bot.command("resumo", (ctx) => withErrors(ctx, async () => reply(ctx, await dailySummaryMessage())));
 
