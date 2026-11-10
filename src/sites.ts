@@ -37,7 +37,7 @@ const SITES: Site[] = [
   { name: "CS2 API", url: "https://cs2.devkoala.com/api/healthz", check: jsonField("ok") },
   { name: "Koala Fit", url: "https://fit.devkoala.com/login" },
   { name: "Wallet", url: "https://wallet.devkoala.com/healthz" },
-  { name: "Garagem", url: "https://garagem.devkoala.com/healthz", check: jsonField("ok") },
+  { name: "Koala Bank", url: "https://bank.devkoala.com/healthz", check: jsonField("ok") },
   { name: "Club Claude", url: "https://clubclaude.devkoala.com/healthz", check: jsonField("ok") },
   { name: "Portfólio", url: "https://devkoala.com/", check: (p) => (p.body.includes("Herbert") ? null : "página sem o conteúdo esperado") },
   { name: "Favela League", url: "https://favelaleague.devkoala.com/" },

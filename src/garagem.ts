@@ -1,11 +1,11 @@
 import { config } from "./config.ts";
 import { escapeHtml } from "./format.ts";
 
-// Garagem (fundo da troca de carro, garagem.devkoala.com). O bot chama a API
+// Garagem (fundo da troca de carro, bank.devkoala.com). O bot chama a API
 // do app pela rede interna "db" com a chave GARAGEM_BOT_CHAVE. As contas ficam
 // no app (public/calculo.js, servido em /api/resumo); aqui só formatamos.
 
-const APP_URL = "https://garagem.devkoala.com";
+const APP_URL = "https://bank.devkoala.com";
 
 type Resumo = {
   fundo: number;
