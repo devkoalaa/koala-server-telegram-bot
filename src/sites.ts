@@ -33,8 +33,8 @@ const jsonField = (field: string) => (p: Probe) => {
 };
 
 const SITES: Site[] = [
-  { name: "CS2 Hub", url: "https://cs2.devkoala.com/healthz", check: jsonField("ok") },
-  { name: "CS2 API", url: "https://cs2.devkoala.com/api/healthz", check: jsonField("ok") },
+  { name: "CS2 Recap", url: "https://cs2recap.com/healthz", check: jsonField("ok") },
+  { name: "CS2 API", url: "https://cs2recap.com/api/healthz", check: jsonField("ok") },
   { name: "Koala Fit", url: "https://fit.devkoala.com/login" },
   { name: "Wallet", url: "https://wallet.devkoala.com/healthz" },
   { name: "Koala Bank", url: "https://bank.devkoala.com/healthz", check: jsonField("ok") },
