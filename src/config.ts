@@ -15,6 +15,8 @@ export const config = {
   timeZone: process.env.TZ ?? "America/Sao_Paulo",
   // Read-only role on the koala-fit database (training reminder + weekly summary).
   koalaFitDatabaseUrl: required("KOALA_FIT_DATABASE_URL"),
+  // /cs2: mesmo usuário somente leitura, no banco cs2_smokes (só algumas colunas). Vazio desliga.
+  cs2RecapDatabaseUrl: process.env.CS2_RECAP_DATABASE_URL ?? "",
   notifyPort: Number(process.env.NOTIFY_PORT ?? 8081),
   // Public sites checked from outside (see src/sites.ts).
   siteCheckIntervalSeconds: Number(process.env.SITE_CHECK_INTERVAL_SECONDS ?? 60),
