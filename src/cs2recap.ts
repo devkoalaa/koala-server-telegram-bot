@@ -9,7 +9,39 @@ import { escapeHtml } from "./format.ts";
 
 const pool = config.cs2RecapDatabaseUrl ? new pg.Pool({ connectionString: config.cs2RecapDatabaseUrl, max: 2 }) : null;
 
+const umami = config.umamiDatabaseUrl ? new pg.Pool({ connectionString: config.umamiDatabaseUrl, max: 1 }) : null;
+
 export const cs2RecapAtivo = () => pool !== null;
+
+// Visitas (Umami): pessoas = sessões anônimas distintas; event_type 1 = página vista.
+const VISITAS = `
+  select
+    count(distinct session_id) filter (where created_at >= now() - interval '1 day')::int as pessoas_dia,
+    count(*) filter (where created_at >= now() - interval '1 day')::int as paginas_dia,
+    count(distinct session_id)::int as pessoas_semana,
+    count(*)::int as paginas_semana
+  from website_event where hostname = 'cs2recap.com' and event_type = 1 and created_at >= now() - interval '7 days'`;
+const ORIGENS = `
+  select coalesce(nullif(referrer_domain, ''), 'direto') as origem, count(distinct session_id)::int as pessoas
+  from website_event where hostname = 'cs2recap.com' and event_type = 1 and created_at >= now() - interval '7 days'
+    and coalesce(referrer_domain, '') not in ('cs2recap.com', 'www.cs2recap.com')
+  group by 1 order by 2 desc limit 5`;
+
+async function visitasLinhas(): Promise<string[]> {
+  if (!umami) return [];
+  try {
+    const [{ rows: [v] }, { rows: origens }] = await Promise.all([
+      umami.query<{ pessoas_dia: number; paginas_dia: number; pessoas_semana: number; paginas_semana: number }>(VISITAS),
+      umami.query<{ origem: string; pessoas: number }>(ORIGENS),
+    ]);
+    return [
+      `👀 Visitas: <b>${v.pessoas_dia}</b> pessoas (${v.paginas_dia} páginas) em 24 h · <b>${v.pessoas_semana}</b> (${v.paginas_semana}) em 7 dias`,
+      ...(origens.length ? [`↗️ Vieram de: ${origens.map((o) => `${escapeHtml(o.origem)} ${o.pessoas}`).join(" · ")}`] : []),
+    ];
+  } catch {
+    return ["👀 Visitas: Umami indisponível"];
+  }
+}
 
 type Resumo = {
   usuarios: number; novos_dia: number; novos_semana: number; novos_mes: number;
@@ -50,15 +82,17 @@ const online = (d: Date | null) => (d && Date.now() - d.getTime() < 2 * 60_000 ?
 
 export async function cs2RecapMessage(): Promise<string> {
   if (!pool) return "🎯 <b>CS2 Recap</b>: falta CS2_RECAP_DATABASE_URL no .env do bot.";
-  const [{ rows: [r] }, { rows: ultimos }] = await Promise.all([
+  const [{ rows: [r] }, { rows: ultimos }, visitas] = await Promise.all([
     pool.query<Resumo>(RESUMO),
     pool.query<{ username: string; createdAt: Date; lastSeenAt: Date | null }>(
       `select username, coalesce("accessGrantedAt", "createdAt") as "createdAt", "lastSeenAt" from users order by 2 desc limit 5`),
+    visitasLinhas(),
   ]);
   const desde = r.primeiro_visto ? ` <i>(contando desde ${dia(r.primeiro_visto)})</i>` : "";
   return [
     `🎯 <b>CS2 Recap</b> — cs2recap.com`,
     "",
+    ...visitas,
     `👥 <b>${r.usuarios}</b> contas · +${r.novos_dia} hoje · +${r.novos_semana} na semana · +${r.novos_mes} no mês`,
     `🟢 Abriram o site: <b>${r.vistos_dia}</b> em 24 h · <b>${r.vistos_semana}</b> em 7 dias${desde}`,
     `🎮 Jogaram (partida importada): <b>${r.jogaram_semana}</b> em 7 dias`,
