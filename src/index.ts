@@ -16,6 +16,7 @@ import {
   undoProduct,
   type FoodImage,
 } from "./food.ts";
+import { doseReminder, dosesSummary, logDose, parseDose, undoDose } from "./doses.ts";
 import { escapeHtml } from "./format.ts";
 import {
   agoraMessage,
@@ -138,6 +139,30 @@ async function productsKeyboard(): Promise<{ html: string; keyboard?: InlineKeyb
   for (const p of products) keyboard.text(`🗑️ Acabou: ${p.name}`, `product-archive:${p.id}`).row();
   return { html, keyboard };
 }
+
+// /dose fica fora do menu (COMMANDS) e do /help de propósito: é discreto.
+bot.command("dose", (ctx) =>
+  withErrors(ctx, async () => {
+    const arg = ctx.match.trim();
+    if (!arg) return reply(ctx, await dosesSummary());
+    const parsed = parseDose(arg);
+    if (!parsed) return reply(ctx, "Uso: <code>/dose 2,5</code> e, se quiser, observações depois (local, efeitos).");
+    const messageId = ctx.message!.message_id;
+    await ctx.reply(await logDose(parsed.doseMg, parsed.notes, messageId), {
+      parse_mode: "HTML",
+      reply_parameters: { message_id: messageId },
+      reply_markup: new InlineKeyboard().text("↩️ Desfazer", `dose-undo:${messageId}`),
+    });
+  }),
+);
+
+bot.callbackQuery(/^dose-undo:(\d+)$/, (ctx) =>
+  withErrors(ctx, async () => {
+    const undone = await undoDose(Number(ctx.match[1]));
+    await ctx.answerCallbackQuery({ text: undone ? "Desfeito" : "Já não estava registrada" });
+    await ctx.editMessageText(undone ? "↩️ Dose desfeita." : "↩️ Nada a desfazer.");
+  }),
+);
 
 bot.command("produtos", (ctx) =>
   withErrors(ctx, async () => {
@@ -546,6 +571,14 @@ if (garagemAtivo()) {
 }
 
 startScheduler([
+  {
+    name: "lembrete da dose semanal",
+    ...parseTime(config.doseReminderTime),
+    run: async () => {
+      const message = await doseReminder();
+      if (message) await sendToOwner(message);
+    },
+  },
   {
     name: "resumo diário",
     ...parseTime(config.dailySummaryTime),

@@ -48,6 +48,8 @@ export const config = {
   garagemReminderTime: process.env.GARAGEM_REMINDER_TIME ?? "19:00",
   dailySummaryTime: process.env.DAILY_SUMMARY_TIME ?? "08:00",
   trainingReminderTime: process.env.TRAINING_REMINDER_TIME ?? "18:00",
+  // Lembrete da dose semanal (/dose), só no dia em que ela vence ou atrasa.
+  doseReminderTime: process.env.DOSE_REMINDER_TIME ?? "10:00",
   // Sundays.
   weeklySummaryTime: process.env.WEEKLY_SUMMARY_TIME ?? "20:00",
 };
