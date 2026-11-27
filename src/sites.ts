@@ -41,6 +41,7 @@ const SITES: Site[] = [
   { name: "Club Claude", url: "https://clubclaude.devkoala.com/healthz", check: jsonField("ok") },
   { name: "Portfólio", url: "https://devkoala.com/", check: (p) => (p.body.includes("Herbert") ? null : "página sem o conteúdo esperado") },
   { name: "Favela League", url: "https://favelaleague.devkoala.com/" },
+  { name: "Leonida Atlas", url: "https://leonida.devkoala.com/healthz", check: (p) => (p.body.startsWith("ok") ? null : "resposta sem \"ok\"") },
   { name: "Rayonômetro", url: "https://devkoala.com/rayonometro/healthz", check: (p) => (p.body.startsWith("ok") ? null : "resposta sem \"ok\"") },
   { name: "Rádio — transmissão", url: "https://radio.devkoala.com/api/nowplaying/koala", check: jsonField("is_online") },
   { name: "Rádio — estúdio", url: "https://radio.devkoala.com/studio-api/health", check: jsonField("ok") },
